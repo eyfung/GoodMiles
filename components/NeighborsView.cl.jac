@@ -26,7 +26,8 @@ def:pub NeighborsView() -> JsxElement {
     has deleting_id: str = "";
     has wellbeing_person: str = "";
     has wellbeing_history: list[dict] = [];
-    has note_drafts: dict = {};
+    has editing_note_id: str = "";
+    has editing_note_text: str = "";
     has saving_note_id: str = "";
     has note_error: str = "";
 
@@ -110,19 +111,21 @@ def:pub NeighborsView() -> JsxElement {
     def open_wellbeing(person_name: str, history: list[dict]) {
         wellbeing_person = person_name;
         wellbeing_history = history;
-        note_drafts = {};
+        editing_note_id = "";
+        editing_note_text = "";
     }
 
     def close_wellbeing(_e: MouseEvent) {
         wellbeing_person = "";
         wellbeing_history = [];
+        editing_note_id = "";
+        editing_note_text = "";
         note_error = "";
     }
 
     def update_note_draft(session_id: str, notes: str) {
-        updated_drafts = dict(note_drafts);
-        updated_drafts[session_id] = notes;
-        note_drafts = updated_drafts;
+        editing_note_id = session_id;
+        editing_note_text = notes;
     }
 
     async def save_session_notes(session_id: str, notes: str) -> None {
@@ -463,7 +466,7 @@ def:pub NeighborsView() -> JsxElement {
                                 session_stop = session["stop"] as str;
                                 session_feeling = session["feeling"] as str;
                                 session_notes = session["notes"] as str;
-                                displayed_notes = note_drafts[session_id] as str if session_id in note_drafts else session_notes;
+                                displayed_notes = editing_note_text if editing_note_id == session_id else session_notes;
                                 session_net = session["net"] as int;
                                 net_class = "text-sm font-medium " + ("text-emerald-600" if session_net >= 0 else "text-rose-600");
                                 <div key={session["id"] as str} className="border-b border-border last:border-b-0 p-4">
@@ -481,18 +484,27 @@ def:pub NeighborsView() -> JsxElement {
                                         <textarea
                                             defaultValue={session_notes}
                                             onChange={lambda (e: any) { update_note_draft(session_id, e.target.value); }}
-                                            onBlur={lambda (e: any) { save_session_notes(session_id, e.target.value); }}
                                             placeholder="Type notes about this session..."
                                             rows={3}
                                             className="mt-1.5 w-full resize-y rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
                                         />
-                                        {saving_note_id == session_id and <p className="mt-1 text-xs text-muted-foreground">Saving...</p>}
-                                        {session_feeling != "Not recorded" and
-                                            <span className={"mt-2 inline-block rounded-full px-2.5 py-1 text-xs font-medium " + feeling_class(session_feeling)}>{session_feeling}</span>
-                                        }
-                                        {session_feeling == "Not recorded" and displayed_notes.strip() == "" and
-                                            <span className="mt-2 inline-block rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">Not recorded</span>
-                                        }
+                                        <div className="mt-2 flex items-center justify-between gap-3">
+                                            <div>
+                                                {session_feeling != "Not recorded" and
+                                                    <span className={"inline-block rounded-full px-2.5 py-1 text-xs font-medium " + feeling_class(session_feeling)}>{session_feeling}</span>
+                                                }
+                                                {session_feeling == "Not recorded" and displayed_notes.strip() == "" and
+                                                    <span className="inline-block rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">Not recorded</span>
+                                                }
+                                            </div>
+                                            <Button
+                                                size="sm"
+                                                disabled={saving_note_id != ""}
+                                                onClick={lambda { save_session_notes(session_id, displayed_notes); }}
+                                            >
+                                                {("Saving..." if saving_note_id == session_id else "Save")}
+                                            </Button>
+                                        </div>
                                     </div>
                                 </div>
                             }}
