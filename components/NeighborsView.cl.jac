@@ -1,10 +1,29 @@
+import from ".ui.button" { Button }
+import from ".ui.select" { Select, SelectTrigger, SelectContent, SelectGroup, SelectItem, SelectValue }
+import from ".ui.table" { Table, TableHeader, TableBody, TableRow, TableHead, TableCell }
 import from ".ui.skeleton" { Skeleton }
-sv import from "..services.goodmiles" { api_neighbors }
+import from "@hugeicons/react" { HugeiconsIcon }
+import from "@hugeicons/core-free-icons" {
+    Search01Icon,
+    Add01Icon,
+    PencilEdit01Icon,
+    Delete02Icon,
+    UnfoldMoreIcon
+}
+sv import from "..services.goodmiles" { api_neighbors, api_add_neighbor, api_delete_neighbor }
 
 def:pub NeighborsView() -> JsxElement {
     has neighbors: list[dict] = [];
     has loading: bool = True;
     has error: str = "";
+    has search: str = "";
+    has selected_zone: str = "all";
+    has show_add: bool = False;
+    has new_name: str = "";
+    has new_zone: str = "";
+    has adding: bool = False;
+    has form_error: str = "";
+    has deleting_id: str = "";
 
     async can with entry {
         try {
@@ -16,69 +35,260 @@ def:pub NeighborsView() -> JsxElement {
         loading = False;
     }
 
-    if loading {
-        return <div className="p-8">
-            <div className="mb-8">
-                <h1 className="text-[23px] font-semibold tracking-[-0.44px] leading-[25px]" style={{"color": "#343433"}}>Neighbors</h1>
-                <p className="text-[15px] mt-1" style={{"color": "#7e7e7d"}}>Community members in the mobility program</p>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-                {for _ in [0, 1, 2, 3] {
-                    <div key={str(_)} className="rounded-[10px] p-8" style={{"backgroundColor": "#ffffff", "boxShadow": "inset 0 0 0 1px #f2f0ed"}}>
-                        <Skeleton className="h-4 w-20 mb-1" />
-                        <Skeleton className="h-3 w-16 mb-6" />
-                        <Skeleton className="h-8 w-24 mb-4" />
-                        <Skeleton className="h-3 w-32" />
-                    </div>
-                }}
-            </div>
-        </div>;
+    def open_add(_e: MouseEvent) {
+        new_name = "";
+        new_zone = "";
+        form_error = "";
+        show_add = True;
     }
 
-    if error != "" {
-        return <div className="p-8">
-            <div className="rounded-[10px] p-4 text-[14px]" style={{"backgroundColor": "#fff0f0", "color": "#ff2b3a", "boxShadow": "inset 0 0 0 1px #ffd0d0"}}>
-                Failed to load neighbors: {error}
-            </div>
-        </div>;
+    def close_add(_e: MouseEvent) {
+        if not adding {
+            show_add = False;
+        }
     }
 
-    return <div className="p-8">
-        <div className="mb-8">
-            <h1 className="text-[23px] font-semibold tracking-[-0.44px] leading-[25px]" style={{"color": "#343433"}}>Neighbors</h1>
-            <p className="text-[15px] mt-1" style={{"color": "#7e7e7d"}}>Community members in the mobility program</p>
-        </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-            {for n in neighbors {
-                bal = n["points_balance"] as int;
-                earned = n["points_earned"] as int;
-                spent = n["points_spent"] as int;
-                zone_str = n["home_zone"] as str;
-                name_str = n["name"] as str;
-                id_str = n["id"] as str;
-                <div key={id_str} className="rounded-[10px] p-6" style={{"backgroundColor": "#ffffff", "boxShadow": "inset 0 0 0 1px #f2f0ed"}}>
-                    <div className="mb-4">
-                        <p className="text-[15px] font-semibold" style={{"color": "#343433"}}>{name_str}</p>
-                        <span className="inline-block mt-1 px-2 py-0.5 rounded-[6px] text-[11px] font-medium capitalize" style={{"backgroundColor": "#f2f0ed", "color": "#474645"}}>
-                            {zone_str} zone
-                        </span>
-                    </div>
-                    <div className="mb-4">
-                        <span className="text-[32px] font-semibold tracking-[-0.5px]" style={{"color": "#121212"}}>{str(bal)}</span>
-                        <span className="text-[13px] ml-1.5" style={{"color": "#7e7e7d"}}>pts</span>
-                    </div>
-                    <div className="flex gap-4 text-[13px]">
-                        <div>
-                            <span className="font-medium" style={{"color": "#00c978"}}>+{str(earned)}</span>
-                            <span className="ml-1" style={{"color": "#7e7e7d"}}>earned</span>
-                        </div>
-                        <div>
-                            <span className="font-medium" style={{"color": "#ff3e00"}}>-{str(spent)}</span>
-                            <span className="ml-1" style={{"color": "#7e7e7d"}}>spent</span>
-                        </div>
-                    </div>
+    def update_new_name(e: ChangeEvent) {
+        new_name = e.target.value;
+    }
+
+    async def submit_person(e: FormEvent) -> None {
+        e.preventDefault();
+        if new_name.strip() == "" {
+            form_error = "Enter a name.";
+            return;
+        }
+        if new_zone == "" {
+            form_error = "Select a region.";
+            return;
+        }
+        adding = True;
+        form_error = "";
+        try {
+            data: any = await api_add_neighbor(new_name, new_zone);
+            result = data as dict;
+            if "error" in result {
+                form_error = result["error"] as str;
+            } else {
+                refreshed: any = await api_neighbors();
+                neighbors = refreshed as list[dict];
+                show_add = False;
+                new_name = "";
+                new_zone = "";
+            }
+        } except Exception as ex {
+            form_error = str(ex);
+        }
+        adding = False;
+    }
+
+    async def delete_person(person_id: str, person_name: str) -> None {
+        if not confirm("Delete " + person_name + "? This cannot be undone.") {
+            return;
+        }
+        deleting_id = person_id;
+        error = "";
+        try {
+            data: any = await api_delete_neighbor(person_id);
+            result = data as dict;
+            if "error" in result {
+                error = result["error"] as str;
+            } else {
+                neighbors = [n for n in neighbors if (n["id"] as str) != person_id];
+            }
+        } except Exception as ex {
+            error = str(ex);
+        }
+        deleting_id = "";
+    }
+
+    visible_neighbors: list[dict] = [];
+    query = search.lower();
+    for n in neighbors {
+        person_name = n["name"] as str;
+        person_zone = n["home_zone"] as str;
+        matches_search = query == "" or query in person_name.lower();
+        matches_zone = selected_zone == "all" or person_zone == selected_zone;
+        if matches_search and matches_zone {
+            visible_neighbors = visible_neighbors + [n];
+        }
+    }
+
+    return <div className="p-6 lg:p-8 min-h-full">
+        <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between mb-7">
+            <div>
+                <h1 className="text-3xl font-semibold tracking-tight">People</h1>
+                <p className="text-muted-foreground text-sm mt-1.5">Everyone in the mobility program, in one place.</p>
+            </div>
+            <div className="flex flex-col sm:flex-row gap-3 w-full lg:w-auto">
+                <div className="relative sm:w-72">
+                    <HugeiconsIcon
+                        icon={Search01Icon}
+                        strokeWidth={2}
+                        className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground pointer-events-none"
+                    />
+                    <input
+                        type="search"
+                        value={search}
+                        onChange={lambda (e: any) { search = e.target.value; }}
+                        placeholder="Search people..."
+                        aria-label="Search people"
+                        className="h-10 w-full rounded-lg border border-input bg-background pl-9 pr-3 text-sm outline-none transition-shadow placeholder:text-muted-foreground focus:border-primary focus:ring-2 focus:ring-primary/15"
+                    />
                 </div>
-            }}
+                <Select value={selected_zone} onValueChange={lambda (v: str) { selected_zone = v; }}>
+                    <SelectTrigger className="h-10 w-full sm:w-40">
+                        <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectGroup>
+                            <SelectItem value="all">All zones</SelectItem>
+                            <SelectItem value="north">North</SelectItem>
+                            <SelectItem value="central">Central</SelectItem>
+                            <SelectItem value="south">South</SelectItem>
+                        </SelectGroup>
+                    </SelectContent>
+                </Select>
+                <Button className="h-10 px-4" title="Add a person (name and home zone only)" onClick={open_add}>
+                    <HugeiconsIcon icon={Add01Icon} strokeWidth={2} className="size-4" />
+                    Add Person
+                </Button>
+            </div>
         </div>
+
+        {error != "" and
+            <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-4 text-destructive text-sm">
+                Failed to load people: {error}
+            </div>
+        }
+
+        {error == "" and
+            <div className="rounded-lg border border-border overflow-hidden min-h-[430px]">
+                <Table>
+                    <TableHeader>
+                        <TableRow className="hover:bg-transparent">
+                            <TableHead className="h-12 px-4">
+                                <span className="inline-flex items-center gap-1.5">Name <HugeiconsIcon icon={UnfoldMoreIcon} strokeWidth={2} className="size-3.5 text-muted-foreground" /></span>
+                            </TableHead>
+                            <TableHead className="h-12 px-4">
+                                <span className="inline-flex items-center gap-1.5">Home Zone <HugeiconsIcon icon={UnfoldMoreIcon} strokeWidth={2} className="size-3.5 text-muted-foreground" /></span>
+                            </TableHead>
+                            <TableHead className="h-12 px-4">
+                                <span className="inline-flex items-center gap-1.5">Points Balance <HugeiconsIcon icon={UnfoldMoreIcon} strokeWidth={2} className="size-3.5 text-muted-foreground" /></span>
+                            </TableHead>
+                            <TableHead className="h-12 px-4">
+                                <span className="inline-flex items-center gap-1.5">Points Earned <HugeiconsIcon icon={UnfoldMoreIcon} strokeWidth={2} className="size-3.5 text-muted-foreground" /></span>
+                            </TableHead>
+                            <TableHead className="h-12 px-4">
+                                <span className="inline-flex items-center gap-1.5">Points Spent <HugeiconsIcon icon={UnfoldMoreIcon} strokeWidth={2} className="size-3.5 text-muted-foreground" /></span>
+                            </TableHead>
+                            <TableHead className="h-12 px-4">
+                                <span className="inline-flex items-center gap-1.5">Net Gained <HugeiconsIcon icon={UnfoldMoreIcon} strokeWidth={2} className="size-3.5 text-muted-foreground" /></span>
+                            </TableHead>
+                            <TableHead className="h-12 px-4 text-center">Actions</TableHead>
+                        </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                        {loading and
+                            <TableRow>
+                                <TableCell className="h-16 px-4"><Skeleton className="h-4 w-20" /></TableCell>
+                                <TableCell className="h-16 px-4"><Skeleton className="h-4 w-20" /></TableCell>
+                                <TableCell className="h-16 px-4"><Skeleton className="h-4 w-20" /></TableCell>
+                                <TableCell className="h-16 px-4"><Skeleton className="h-4 w-20" /></TableCell>
+                                <TableCell className="h-16 px-4"><Skeleton className="h-4 w-20" /></TableCell>
+                                <TableCell className="h-16 px-4"><Skeleton className="h-4 w-20" /></TableCell>
+                                <TableCell className="h-16 px-4"><Skeleton className="h-4 w-20" /></TableCell>
+                            </TableRow>
+                        }
+                        {for n in visible_neighbors {
+                            id_str = n["id"] as str;
+                            name_str = n["name"] as str;
+                            zone_str = n["home_zone"] as str;
+                            balance = n["points_balance"] as int;
+                            earned = n["points_earned"] as int;
+                            spent = n["points_spent"] as int;
+                            net_gained = earned - spent;
+                            net_class = "px-4 font-medium " + ("text-emerald-600" if net_gained >= 0 else "text-rose-600");
+                            <TableRow key={id_str} className="h-16">
+                                <TableCell className="px-4 font-medium">{name_str}</TableCell>
+                                <TableCell className="px-4 capitalize">{zone_str}</TableCell>
+                                <TableCell className="px-4">{str(balance)}</TableCell>
+                                <TableCell className="px-4">{str(earned)}</TableCell>
+                                <TableCell className="px-4">{str(spent)}</TableCell>
+                                <TableCell className={net_class}>{("+" if net_gained > 0 else "") + str(net_gained)}</TableCell>
+                                <TableCell className="px-4">
+                                    <div className="flex items-center justify-center gap-1">
+                                        <Button variant="ghost" size="icon-sm" title={"Edit " + name_str + " name or home zone"}>
+                                            <HugeiconsIcon icon={PencilEdit01Icon} strokeWidth={2} className="size-4" />
+                                        </Button>
+                                        <Button
+                                            variant="ghost"
+                                            size="icon-sm"
+                                            className="text-destructive hover:text-destructive"
+                                            title={"Delete " + name_str}
+                                            disabled={deleting_id != ""}
+                                            onClick={lambda { delete_person(id_str, name_str); }}
+                                        >
+                                            <HugeiconsIcon icon={Delete02Icon} strokeWidth={2} className="size-4" />
+                                        </Button>
+                                    </div>
+                                </TableCell>
+                            </TableRow>
+                        }}
+                        {not loading and len(visible_neighbors) == 0 and
+                            <TableRow>
+                                <TableCell colSpan={7} className="h-32 text-center text-muted-foreground">
+                                    No people match this search and zone.
+                                </TableCell>
+                            </TableRow>
+                        }
+                    </TableBody>
+                </Table>
+            </div>
+        }
+
+        {show_add and
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/35 p-4">
+                <div className="w-full max-w-md rounded-xl border border-border bg-background p-6 shadow-xl">
+                    <div className="mb-5">
+                        <h2 className="text-xl font-semibold">Add Person</h2>
+                        <p className="text-sm text-muted-foreground mt-1">New people automatically start with 50 points.</p>
+                    </div>
+                    <form onSubmit={submit_person} className="space-y-4">
+                        <div>
+                            <label htmlFor="person-name" className="text-sm font-medium">Name</label>
+                            <input
+                                id="person-name"
+                                value={new_name}
+                                onChange={update_new_name}
+                                placeholder="Enter their name"
+                                autoFocus={True}
+                                className="mt-1.5 h-10 w-full rounded-lg border border-input bg-background px-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
+                            />
+                        </div>
+                        <div>
+                            <label className="text-sm font-medium">Region</label>
+                            <Select value={new_zone} onValueChange={lambda (v: str) { new_zone = v; }}>
+                                <SelectTrigger className="mt-1.5 h-10 w-full">
+                                    <SelectValue placeholder="Select a region" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectGroup>
+                                        <SelectItem value="north">North</SelectItem>
+                                        <SelectItem value="central">Central</SelectItem>
+                                        <SelectItem value="south">South</SelectItem>
+                                    </SelectGroup>
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        {form_error != "" and <p className="text-sm text-destructive">{form_error}</p>}
+                        <div className="flex justify-end gap-2 pt-2">
+                            <Button type="button" variant="outline" onClick={close_add} disabled={adding}>Cancel</Button>
+                            <Button type="submit" disabled={adding}>{("Adding..." if adding else "Add Person")}</Button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        }
     </div>;
 }

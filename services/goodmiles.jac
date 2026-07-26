@@ -10,6 +10,7 @@ node Neighbor {
     has home_zone: str;
     has points_earned: int = 0;
     has points_spent: int = 0;
+    has points_initialized: bool = False;
 }
 
 node ServiceStop {
@@ -49,10 +50,10 @@ def seed_demo_data {
     root ++> ServiceStop(name="Community Health", stop_type="health", zone="south", base_cost=15, bonus_on_visit=10);
     root ++> ServiceStop(name="Jobs Office", stop_type="jobs", zone="south", base_cost=15, bonus_on_visit=25);
 
-    root ++> Neighbor(name="Alex", points_balance=100, home_zone="north");
-    root ++> Neighbor(name="Jordan", points_balance=80, home_zone="south");
-    root ++> Neighbor(name="Morgan", points_balance=120, home_zone="central");
-    root ++> Neighbor(name="Riley", points_balance=150, home_zone="north");
+    root ++> Neighbor(name="Alex", points_balance=50, home_zone="north", points_initialized=True);
+    root ++> Neighbor(name="Jordan", points_balance=50, home_zone="south", points_initialized=True);
+    root ++> Neighbor(name="Morgan", points_balance=50, home_zone="central", points_initialized=True);
+    root ++> Neighbor(name="Riley", points_balance=50, home_zone="north", points_initialized=True);
 }
 
 # ===========================
@@ -85,11 +86,24 @@ def get_stop(name: str) -> ServiceStop | None {
     return None;
 }
 
+def initialize_starting_points {
+    for n in get_all_neighbors() {
+        if not n.points_initialized {
+            n.points_balance = 50;
+            n.points_earned = 0;
+            n.points_spent = 0;
+            n.points_initialized = True;
+        }
+    }
+}
+
 # ===========================
-# Public API endpoints — pure readers (no graph writes)
+# Public API endpoints
 # ===========================
 
 def:pub api_neighbors() -> list[dict] {
+    seed_demo_data();
+    initialize_starting_points();
     result: list[dict] = [];
     for n in get_all_neighbors() {
         result = result + [{
@@ -102,6 +116,51 @@ def:pub api_neighbors() -> list[dict] {
         }];
     }
     return result;
+}
+
+def:pub api_add_neighbor(name: str, home_zone: str) -> dict {
+    seed_demo_data();
+    initialize_starting_points();
+
+    clean_name = name.strip();
+    clean_zone = home_zone.lower();
+    if clean_name == "" {
+        return {"error": "Name is required"};
+    }
+    if clean_zone not in ["north", "central", "south"] {
+        return {"error": "Select a valid region"};
+    }
+    for n in get_all_neighbors() {
+        if n.name.lower() == clean_name.lower() {
+            return {"error": "A person with this name already exists"};
+        }
+    }
+
+    person = root ++> Neighbor(
+        name=clean_name,
+        points_balance=50,
+        home_zone=clean_zone,
+        points_initialized=True
+    );
+    return {
+        "id": jid(person),
+        "name": person.name,
+        "points_balance": person.points_balance,
+        "points_earned": person.points_earned,
+        "points_spent": person.points_spent,
+        "home_zone": person.home_zone
+    };
+}
+
+def:pub api_delete_neighbor(person_id: str) -> dict {
+    for n in get_all_neighbors() {
+        if jid(n) == person_id {
+            removed_name = n.name;
+            del n;
+            return {"status": "deleted", "name": removed_name};
+        }
+    }
+    return {"error": "Person not found"};
 }
 
 def:pub api_stops() -> list[dict] {
@@ -120,6 +179,8 @@ def:pub api_stops() -> list[dict] {
 }
 
 def:pub api_optimize(neighbor_name: str) -> dict {
+    seed_demo_data();
+    initialize_starting_points();
     n = get_neighbor(neighbor_name);
     if n == None {
         return {"error": "Neighbor not found"};
