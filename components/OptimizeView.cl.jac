@@ -198,7 +198,7 @@ def:pub OptimizeView() -> JsxElement {
         {pending_stop != "" and
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/35 p-4">
                 <div className="w-full max-w-md rounded-[14px] bg-white p-6 shadow-xl">
-                    <h2 className="text-[20px] font-semibold" style={{"color": "#343433"}}>Session wellbeing</h2>
+                    <h2 className="text-[20px] font-semibold" style={{"color": "#343433"}}>Session check-in</h2>
                     <p className="text-[14px] mt-1 mb-5" style={{"color": "#7e7e7d"}}>
                         {"How was " + selected_neighbor + " feeling during the session at " + pending_stop + "?"}
                     </p>

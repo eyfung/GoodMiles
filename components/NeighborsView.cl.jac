@@ -262,7 +262,7 @@ def:pub NeighborsView() -> JsxElement {
                             <TableHead className="h-12 w-24 px-2 text-center text-xs">
                                 <span className="inline-flex items-center justify-center gap-1 leading-tight whitespace-normal">Net Gained <HugeiconsIcon icon={UnfoldMoreIcon} strokeWidth={2} className="size-3.5 text-muted-foreground shrink-0" /></span>
                             </TableHead>
-                            <TableHead className="h-12 px-4">Wellbeing</TableHead>
+                            <TableHead className="h-12 px-4">Check-In</TableHead>
                             <TableHead className="h-12 px-4 text-center">Actions</TableHead>
                         </TableRow>
                     </TableHeader>
@@ -330,7 +330,7 @@ def:pub NeighborsView() -> JsxElement {
                                         variant="outline"
                                         size="sm"
                                         onClick={lambda { open_wellbeing(name_str, history); }}
-                                        title={"View " + name_str + "'s wellbeing history"}
+                                        title={"View " + name_str + "'s check-in history"}
                                     >
                                         View
                                     </Button>
@@ -421,7 +421,7 @@ def:pub NeighborsView() -> JsxElement {
                                     {str(len(wellbeing_history)) + (" session" if len(wellbeing_history) == 1 else " sessions")}
                                 </span>
                             </div>
-                            <p className="text-sm text-muted-foreground mt-1">Session history, point impact, and recorded feelings.</p>
+                            <p className="text-sm text-muted-foreground mt-1">Session history, points gained, and check-in notes.</p>
                         </div>
                         <Button variant="ghost" size="sm" onClick={close_wellbeing}>Close</Button>
                     </div>
@@ -435,18 +435,22 @@ def:pub NeighborsView() -> JsxElement {
                             {for (session_index, session) in enumerate(wellbeing_history) {
                                 session_stop = session["stop"] as str;
                                 session_feeling = session["feeling"] as str;
-                                session_net = session["net"] as int;
-                                <div key={session["id"] as str} className="flex items-center justify-between gap-4 border-b border-border last:border-b-0 p-4">
-                                    <div>
-                                        <p className="text-sm font-medium">{session_stop}</p>
-                                        <p className="text-xs text-muted-foreground mt-1">{"Session " + str(session_index + 1)}</p>
-                                    </div>
-                                    <div className="flex items-center gap-3">
-                                        <span className={"rounded-full px-2.5 py-1 text-xs font-medium " + feeling_class(session_feeling)}>
-                                            {session_feeling}
+                                session_bonus = session["bonus"] as int;
+                                note_text = session_feeling if session_feeling != "Not recorded" else "No notes recorded";
+                                <div key={session["id"] as str} className="border-b border-border last:border-b-0 p-4">
+                                    <div className="flex items-start justify-between gap-4">
+                                        <div>
+                                            <p className="text-sm font-medium">{session_stop}</p>
+                                            <p className="text-xs text-muted-foreground mt-1">{"Session " + str(session_index + 1)}</p>
+                                        </div>
+                                        <span className="text-sm font-medium text-emerald-600">
+                                            {"+" + str(session_bonus) + " pts gained"}
                                         </span>
-                                        <span className={"text-sm font-medium " + ("text-emerald-600" if session_net >= 0 else "text-rose-600")}>
-                                            {("+" if session_net > 0 else "") + str(session_net) + " pts"}
+                                    </div>
+                                    <div className="mt-3 rounded-lg bg-muted/50 px-3 py-2.5">
+                                        <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Notes</p>
+                                        <span className={"mt-1.5 inline-block rounded-full px-2.5 py-1 text-xs font-medium " + feeling_class(session_feeling)}>
+                                            {note_text}
                                         </span>
                                     </div>
                                 </div>
