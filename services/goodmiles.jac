@@ -129,7 +129,9 @@ def:pub api_neighbors() -> list[dict] {
             "points_earned": n.points_earned,
             "points_spent": n.points_spent,
             "home_zone": n.home_zone,
-            "upskill_progress": upskill_progress
+            "upskill_progress": upskill_progress,
+            "completed_coaching": completed_coaching,
+            "completed_job_support": completed_job_support
         }];
     }
     return result;

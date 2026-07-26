@@ -167,7 +167,7 @@ def:pub NeighborsView() -> JsxElement {
                 <Table>
                     <TableHeader>
                         <TableRow className="hover:bg-transparent">
-                            <TableHead className="h-12 px-4">Progress</TableHead>
+                            <TableHead className="h-12 px-4">Upskilling Progress</TableHead>
                             <TableHead className="h-12 px-4">
                                 <span className="inline-flex items-center gap-1.5">Name <HugeiconsIcon icon={UnfoldMoreIcon} strokeWidth={2} className="size-3.5 text-muted-foreground" /></span>
                             </TableHead>
@@ -210,7 +210,19 @@ def:pub NeighborsView() -> JsxElement {
                             earned = n["points_earned"] as int;
                             spent = n["points_spent"] as int;
                             progress = n["upskill_progress"] as int;
+                            coaching_done = n["completed_coaching"] as bool;
+                            job_support_done = n["completed_job_support"] as bool;
                             progress_label = "Not started" if progress == 0 else ("Job ready" if progress == 100 else "In progress");
+                            progress_detail = "No milestones yet";
+                            if coaching_done and job_support_done {
+                                progress_detail = "Coaching + job support complete";
+                            }
+                            elif coaching_done {
+                                progress_detail = "Coaching complete";
+                            }
+                            elif job_support_done {
+                                progress_detail = "Job support complete";
+                            }
                             progress_color = "bg-amber-300";
                             if progress >= 75 {
                                 progress_color = "bg-emerald-600";
@@ -225,7 +237,7 @@ def:pub NeighborsView() -> JsxElement {
                             net_class = "px-4 font-medium " + ("text-emerald-600" if net_gained >= 0 else "text-rose-600");
                             <TableRow key={id_str} className="h-16">
                                 <TableCell className="px-4">
-                                    <div className="w-28">
+                                    <div className="w-44">
                                         <div className="flex items-center justify-between gap-2 mb-1.5">
                                             <span className="text-xs font-medium">{progress_label}</span>
                                             <span className="text-xs text-muted-foreground">{str(progress)}%</span>
@@ -236,6 +248,7 @@ def:pub NeighborsView() -> JsxElement {
                                                 style={{"width": str(progress) + "%"}}
                                             />
                                         </div>
+                                        <p className="mt-1.5 text-[11px] text-muted-foreground whitespace-normal leading-tight">{progress_detail}</p>
                                     </div>
                                 </TableCell>
                                 <TableCell className="px-4 font-medium">{name_str}</TableCell>
