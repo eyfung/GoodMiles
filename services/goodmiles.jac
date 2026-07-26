@@ -106,8 +106,10 @@ def:pub api_neighbors() -> list[dict] {
     initialize_starting_points();
     result: list[dict] = [];
     for n in get_all_neighbors() {
-        lifetime_points = 50 + n.points_earned;
-        upskill_progress = n.points_earned;
+        upskill_progress = int((n.points_balance * 100) / 150);
+        if upskill_progress < 0 {
+            upskill_progress = 0;
+        }
         if upskill_progress > 100 {
             upskill_progress = 100;
         }
@@ -118,8 +120,7 @@ def:pub api_neighbors() -> list[dict] {
             "points_earned": n.points_earned,
             "points_spent": n.points_spent,
             "home_zone": n.home_zone,
-            "upskill_progress": upskill_progress,
-            "lifetime_points": lifetime_points
+            "upskill_progress": upskill_progress
         }];
     }
     return result;

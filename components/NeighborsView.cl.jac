@@ -210,9 +210,8 @@ def:pub NeighborsView() -> JsxElement {
                             earned = n["points_earned"] as int;
                             spent = n["points_spent"] as int;
                             progress = n["upskill_progress"] as int;
-                            lifetime_points = n["lifetime_points"] as int;
                             progress_label = "Not started" if progress == 0 else ("Job ready" if progress == 100 else "In progress");
-                            progress_detail = str(lifetime_points) + " / 150 lifetime points";
+                            progress_detail = str(balance) + " / 150 current points";
                             progress_color = "bg-amber-300";
                             if progress >= 75 {
                                 progress_color = "bg-emerald-600";
