@@ -202,6 +202,45 @@ def:pub api_delete_neighbor(person_id: str) -> dict {
     return {"error": "Person not found"};
 }
 
+def:pub api_update_neighbor(person_id: str, name: str, home_zone: str) -> dict {
+    clean_name = name.strip();
+    clean_zone = home_zone.lower();
+    if clean_name == "" {
+        return {"error": "Name is required"};
+    }
+    if clean_zone not in ["north", "central", "south"] {
+        return {"error": "Select a valid region"};
+    }
+    person: Neighbor | None = None;
+    for n in get_all_neighbors() {
+        if jid(n) == person_id {
+            person = n;
+        } elif n.name.lower() == clean_name.lower() {
+            return {"error": "A person with this name already exists"};
+        }
+    }
+    if person == None {
+        return {"error": "Person not found"};
+    }
+
+    previous_name = person.name;
+    person.name = clean_name;
+    person.home_zone = clean_zone;
+    if previous_name != clean_name {
+        for t in [root-->][?:Trip] {
+            if t.neighbor_name == previous_name {
+                t.neighbor_name = clean_name;
+            }
+        }
+    }
+    return {
+        "status": "updated",
+        "id": jid(person),
+        "name": person.name,
+        "home_zone": person.home_zone
+    };
+}
+
 def:pub api_stops() -> list[dict] {
     result: list[dict] = [];
     for s in get_all_stops() {

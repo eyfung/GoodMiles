@@ -1,5 +1,5 @@
 import from services.goodmiles {
-    api_neighbors, api_add_neighbor, api_delete_neighbor, api_stops, api_optimize, api_execute, api_update_trip_notes, api_trips,
+    api_neighbors, api_add_neighbor, api_delete_neighbor, api_update_neighbor, api_stops, api_optimize, api_execute, api_update_trip_notes, api_trips,
     Neighbor, ServiceStop, Trip, Seeded
 }
 import from services.jobmatch {

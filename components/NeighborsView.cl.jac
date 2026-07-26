@@ -10,7 +10,7 @@ import from "@hugeicons/core-free-icons" {
     Delete02Icon,
     UnfoldMoreIcon
 }
-sv import from "..services.goodmiles" { api_neighbors, api_add_neighbor, api_delete_neighbor, api_update_trip_notes }
+sv import from "..services.goodmiles" { api_neighbors, api_add_neighbor, api_delete_neighbor, api_update_neighbor, api_update_trip_notes }
 
 def:pub NeighborsView() -> JsxElement {
     has neighbors: list[dict] = [];
@@ -24,6 +24,11 @@ def:pub NeighborsView() -> JsxElement {
     has adding: bool = False;
     has form_error: str = "";
     has deleting_id: str = "";
+    has editing_person_id: str = "";
+    has edit_name: str = "";
+    has edit_zone: str = "";
+    has editing_person: bool = False;
+    has edit_error: str = "";
     has wellbeing_person: str = "";
     has wellbeing_history: list[dict] = [];
     has editing_note_id: str = "";
@@ -108,6 +113,40 @@ def:pub NeighborsView() -> JsxElement {
             error = str(ex);
         }
         deleting_id = "";
+    }
+
+    def open_edit(person_id: str, person_name: str, person_zone: str) {
+        editing_person_id = person_id;
+        edit_name = person_name;
+        edit_zone = person_zone;
+        edit_error = "";
+    }
+
+    def close_edit(_e: MouseEvent) {
+        if not editing_person {
+            editing_person_id = "";
+            edit_error = "";
+        }
+    }
+
+    async def submit_edit(e: FormEvent) -> None {
+        e.preventDefault();
+        editing_person = True;
+        edit_error = "";
+        try {
+            data: any = await api_update_neighbor(editing_person_id, edit_name, edit_zone);
+            result = data as dict;
+            if "error" in result {
+                edit_error = result["error"] as str;
+            } else {
+                refreshed: any = await api_neighbors();
+                neighbors = refreshed as list[dict];
+                editing_person_id = "";
+            }
+        } except Exception as ex {
+            edit_error = str(ex);
+        }
+        editing_person = False;
     }
 
     def open_wellbeing(person_name: str, history: list[dict]) {
@@ -389,7 +428,12 @@ def:pub NeighborsView() -> JsxElement {
                                 </TableCell>
                                 <TableCell className="px-4">
                                     <div className="flex items-center justify-center gap-1">
-                                        <Button variant="ghost" size="icon-sm" title={"Edit " + name_str + " name or home zone"}>
+                                        <Button
+                                            variant="ghost"
+                                            size="icon-sm"
+                                            title={"Edit " + name_str + " name or home zone"}
+                                            onClick={lambda { open_edit(id_str, name_str, zone_str); }}
+                                        >
                                             <HugeiconsIcon icon={PencilEdit01Icon} strokeWidth={2} className="size-4" />
                                         </Button>
                                         <Button
@@ -456,6 +500,49 @@ def:pub NeighborsView() -> JsxElement {
                         <div className="flex justify-end gap-2 pt-2">
                             <Button type="button" variant="outline" onClick={close_add} disabled={adding}>Cancel</Button>
                             <Button type="submit" disabled={adding}>{("Adding..." if adding else "Add Person")}</Button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        }
+
+        {editing_person_id != "" and
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/35 p-4">
+                <div className="w-full max-w-md rounded-xl border border-border bg-background p-6 shadow-xl">
+                    <div className="mb-5">
+                        <h2 className="text-xl font-semibold">Edit Person</h2>
+                        <p className="text-sm text-muted-foreground mt-1">Update their name or home zone.</p>
+                    </div>
+                    <form onSubmit={submit_edit} className="space-y-4">
+                        <div>
+                            <label htmlFor="edit-person-name" className="text-sm font-medium">Name</label>
+                            <input
+                                id="edit-person-name"
+                                value={edit_name}
+                                onChange={lambda (e: any) { edit_name = e.target.value; }}
+                                autoFocus={True}
+                                className="mt-1.5 h-10 w-full rounded-lg border border-input bg-background px-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
+                            />
+                        </div>
+                        <div>
+                            <label className="text-sm font-medium">Home Zone</label>
+                            <Select value={edit_zone} onValueChange={lambda (v: str) { edit_zone = v; }}>
+                                <SelectTrigger className="mt-1.5 h-10 w-full">
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectGroup>
+                                        <SelectItem value="north">North</SelectItem>
+                                        <SelectItem value="central">Central</SelectItem>
+                                        <SelectItem value="south">South</SelectItem>
+                                    </SelectGroup>
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        {edit_error != "" and <p className="text-sm text-destructive">{edit_error}</p>}
+                        <div className="flex justify-end gap-2 pt-2">
+                            <Button type="button" variant="outline" onClick={close_edit} disabled={editing_person}>Cancel</Button>
+                            <Button type="submit" disabled={editing_person}>{("Saving..." if editing_person else "Save Changes")}</Button>
                         </div>
                     </form>
                 </div>
