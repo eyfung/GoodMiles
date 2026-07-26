@@ -210,19 +210,9 @@ def:pub NeighborsView() -> JsxElement {
                             earned = n["points_earned"] as int;
                             spent = n["points_spent"] as int;
                             progress = n["upskill_progress"] as int;
-                            coaching_done = n["completed_coaching"] as bool;
-                            job_support_done = n["completed_job_support"] as bool;
+                            lifetime_points = n["lifetime_points"] as int;
                             progress_label = "Not started" if progress == 0 else ("Job ready" if progress == 100 else "In progress");
-                            progress_detail = "No milestones yet";
-                            if coaching_done and job_support_done {
-                                progress_detail = "Coaching + job support complete";
-                            }
-                            elif coaching_done {
-                                progress_detail = "Coaching complete";
-                            }
-                            elif job_support_done {
-                                progress_detail = "Job support complete";
-                            }
+                            progress_detail = str(lifetime_points) + " / 150 lifetime points";
                             progress_color = "bg-amber-300";
                             if progress >= 75 {
                                 progress_color = "bg-emerald-600";

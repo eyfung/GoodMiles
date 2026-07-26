@@ -106,22 +106,11 @@ def:pub api_neighbors() -> list[dict] {
     initialize_starting_points();
     result: list[dict] = [];
     for n in get_all_neighbors() {
-        completed_coaching = False;
-        completed_job_support = False;
-        for t in [root-->][?:Trip] {
-            if t.neighbor_name == n.name {
-                completed_stop = get_stop(t.stop_name);
-                if completed_stop != None {
-                    if completed_stop.stop_type == "coaching" {
-                        completed_coaching = True;
-                    }
-                    elif completed_stop.stop_type == "jobs" {
-                        completed_job_support = True;
-                    }
-                }
-            }
+        lifetime_points = 50 + n.points_earned;
+        upskill_progress = n.points_earned;
+        if upskill_progress > 100 {
+            upskill_progress = 100;
         }
-        upskill_progress = (50 if completed_coaching else 0) + (50 if completed_job_support else 0);
         result = result + [{
             "id": jid(n),
             "name": n.name,
@@ -130,8 +119,7 @@ def:pub api_neighbors() -> list[dict] {
             "points_spent": n.points_spent,
             "home_zone": n.home_zone,
             "upskill_progress": upskill_progress,
-            "completed_coaching": completed_coaching,
-            "completed_job_support": completed_job_support
+            "lifetime_points": lifetime_points
         }];
     }
     return result;
