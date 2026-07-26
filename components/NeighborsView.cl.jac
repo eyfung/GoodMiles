@@ -103,10 +103,23 @@ def:pub NeighborsView() -> JsxElement {
     }
 
     visible_neighbors: list[dict] = [];
+    not_started_count = 0;
+    in_progress_count = 0;
+    completed_count = 0;
     query = search.lower();
     for n in neighbors {
         person_name = n["name"] as str;
         person_zone = n["home_zone"] as str;
+        person_balance = n["points_balance"] as int;
+        if person_balance <= 50 {
+            not_started_count = not_started_count + 1;
+        }
+        elif person_balance >= 150 {
+            completed_count = completed_count + 1;
+        }
+        else {
+            in_progress_count = in_progress_count + 1;
+        }
         matches_search = query == "" or query in person_name.lower();
         matches_zone = selected_zone == "all" or person_zone == selected_zone;
         if matches_search and matches_zone {
@@ -115,7 +128,7 @@ def:pub NeighborsView() -> JsxElement {
     }
 
     return <div className="p-6 lg:p-8 min-h-full">
-        <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between mb-7">
+        <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between mb-6">
             <div>
                 <h1 className="text-3xl font-semibold tracking-tight">People</h1>
                 <p className="text-muted-foreground text-sm mt-1.5">Everyone in the mobility program, in one place.</p>
@@ -156,6 +169,38 @@ def:pub NeighborsView() -> JsxElement {
             </div>
         </div>
 
+        {not loading and error == "" and
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
+                <div className="rounded-xl border border-amber-300 bg-amber-100 p-4">
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <p className="text-sm font-medium text-amber-900">Not started</p>
+                            <p className="text-xs text-amber-700 mt-1">50 points</p>
+                        </div>
+                        <span className="text-2xl font-semibold text-amber-700">{str(not_started_count)}</span>
+                    </div>
+                </div>
+                <div className="rounded-xl border border-lime-200 bg-lime-50/70 p-4">
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <p className="text-sm font-medium text-lime-900">In progress</p>
+                            <p className="text-xs text-lime-700 mt-1">51–149 points</p>
+                        </div>
+                        <span className="text-2xl font-semibold text-lime-700">{str(in_progress_count)}</span>
+                    </div>
+                </div>
+                <div className="rounded-xl border border-emerald-300 bg-emerald-100 p-4">
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <p className="text-sm font-medium text-emerald-900">Completed</p>
+                            <p className="text-xs text-emerald-700 mt-1">150 points or more</p>
+                        </div>
+                        <span className="text-2xl font-semibold text-emerald-700">{str(completed_count)}</span>
+                    </div>
+                </div>
+            </div>
+        }
+
         {error != "" and
             <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-4 text-destructive text-sm">
                 Failed to load people: {error}
@@ -167,6 +212,7 @@ def:pub NeighborsView() -> JsxElement {
                 <Table>
                     <TableHeader>
                         <TableRow className="hover:bg-transparent">
+                            <TableHead className="h-12 px-4">Upskilling Progress</TableHead>
                             <TableHead className="h-12 px-4">
                                 <span className="inline-flex items-center gap-1.5">Name <HugeiconsIcon icon={UnfoldMoreIcon} strokeWidth={2} className="size-3.5 text-muted-foreground" /></span>
                             </TableHead>
@@ -191,6 +237,7 @@ def:pub NeighborsView() -> JsxElement {
                     <TableBody>
                         {loading and
                             <TableRow>
+                                <TableCell className="h-16 px-4"><Skeleton className="h-4 w-24" /></TableCell>
                                 <TableCell className="h-16 px-4"><Skeleton className="h-4 w-20" /></TableCell>
                                 <TableCell className="h-16 px-4"><Skeleton className="h-4 w-20" /></TableCell>
                                 <TableCell className="h-16 px-4"><Skeleton className="h-4 w-20" /></TableCell>
@@ -207,9 +254,37 @@ def:pub NeighborsView() -> JsxElement {
                             balance = n["points_balance"] as int;
                             earned = n["points_earned"] as int;
                             spent = n["points_spent"] as int;
+                            progress = n["upskill_progress"] as int;
+                            progress_label = "Not started" if balance <= 50 else ("Completed" if balance >= 150 else "In progress");
+                            progress_detail = str(balance) + " current points";
+                            progress_color = "bg-amber-300";
+                            if progress >= 75 {
+                                progress_color = "bg-emerald-600";
+                            }
+                            elif progress >= 50 {
+                                progress_color = "bg-lime-500";
+                            }
+                            elif progress >= 25 {
+                                progress_color = "bg-yellow-400";
+                            }
                             net_gained = earned - spent;
                             net_class = "px-4 font-medium " + ("text-emerald-600" if net_gained >= 0 else "text-rose-600");
                             <TableRow key={id_str} className="h-16">
+                                <TableCell className="px-4">
+                                    <div className="w-44">
+                                        <div className="flex items-center justify-between gap-2 mb-1.5">
+                                            <span className="text-xs font-medium">{progress_label}</span>
+                                            <span className="text-xs text-muted-foreground">{str(progress)}%</span>
+                                        </div>
+                                        <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+                                            <div
+                                                className={"h-full rounded-full transition-all " + progress_color}
+                                                style={{"width": str(progress) + "%"}}
+                                            />
+                                        </div>
+                                        <p className="mt-1.5 text-[11px] text-muted-foreground whitespace-normal leading-tight">{progress_detail}</p>
+                                    </div>
+                                </TableCell>
                                 <TableCell className="px-4 font-medium">{name_str}</TableCell>
                                 <TableCell className="px-4 capitalize">{zone_str}</TableCell>
                                 <TableCell className="px-4">{str(balance)}</TableCell>
@@ -237,7 +312,7 @@ def:pub NeighborsView() -> JsxElement {
                         }}
                         {not loading and len(visible_neighbors) == 0 and
                             <TableRow>
-                                <TableCell colSpan={7} className="h-32 text-center text-muted-foreground">
+                                <TableCell colSpan={8} className="h-32 text-center text-muted-foreground">
                                     No people match this search and zone.
                                 </TableCell>
                             </TableRow>

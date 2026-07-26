@@ -106,13 +106,21 @@ def:pub api_neighbors() -> list[dict] {
     initialize_starting_points();
     result: list[dict] = [];
     for n in get_all_neighbors() {
+        upskill_progress = n.points_balance - 50;
+        if upskill_progress < 0 {
+            upskill_progress = 0;
+        }
+        if upskill_progress > 100 {
+            upskill_progress = 100;
+        }
         result = result + [{
             "id": jid(n),
             "name": n.name,
             "points_balance": n.points_balance,
             "points_earned": n.points_earned,
             "points_spent": n.points_spent,
-            "home_zone": n.home_zone
+            "home_zone": n.home_zone,
+            "upskill_progress": upskill_progress
         }];
     }
     return result;
@@ -156,8 +164,19 @@ def:pub api_delete_neighbor(person_id: str) -> dict {
     for n in get_all_neighbors() {
         if jid(n) == person_id {
             removed_name = n.name;
+            deleted_trips = 0;
+            for t in [root-->][?:Trip] {
+                if t.neighbor_name == removed_name {
+                    del t;
+                    deleted_trips = deleted_trips + 1;
+                }
+            }
             del n;
-            return {"status": "deleted", "name": removed_name};
+            return {
+                "status": "deleted",
+                "name": removed_name,
+                "deleted_trip_records": deleted_trips
+            };
         }
     }
     return {"error": "Person not found"};
