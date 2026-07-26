@@ -175,7 +175,7 @@ def:pub NeighborsView() -> JsxElement {
                     <div className="flex items-center justify-between">
                         <div>
                             <p className="text-sm font-medium text-amber-900">Not started</p>
-                            <p className="text-xs text-amber-700 mt-1">50 points or fewer</p>
+                            <p className="text-xs text-amber-700 mt-1">50 points</p>
                         </div>
                         <span className="text-2xl font-semibold text-amber-700">{str(not_started_count)}</span>
                     </div>
