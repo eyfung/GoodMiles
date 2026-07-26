@@ -10,7 +10,7 @@ import from "@hugeicons/core-free-icons" {
     Delete02Icon,
     UnfoldMoreIcon
 }
-sv import from "..services.goodmiles" { api_neighbors, api_add_neighbor, api_delete_neighbor }
+sv import from "..services.goodmiles" { api_neighbors, api_add_neighbor, api_delete_neighbor, api_update_trip_notes }
 
 def:pub NeighborsView() -> JsxElement {
     has neighbors: list[dict] = [];
@@ -26,6 +26,8 @@ def:pub NeighborsView() -> JsxElement {
     has deleting_id: str = "";
     has wellbeing_person: str = "";
     has wellbeing_history: list[dict] = [];
+    has saving_note_id: str = "";
+    has note_error: str = "";
 
     async can with entry {
         try {
@@ -112,6 +114,22 @@ def:pub NeighborsView() -> JsxElement {
     def close_wellbeing(_e: MouseEvent) {
         wellbeing_person = "";
         wellbeing_history = [];
+        note_error = "";
+    }
+
+    async def save_session_notes(session_id: str, notes: str) -> None {
+        saving_note_id = session_id;
+        note_error = "";
+        try {
+            data: any = await api_update_trip_notes(session_id, notes);
+            result = data as dict;
+            if "error" in result {
+                note_error = result["error"] as str;
+            }
+        } except Exception as ex {
+            note_error = str(ex);
+        }
+        saving_note_id = "";
     }
 
     def feeling_class(feeling: str) -> str {
@@ -433,12 +451,12 @@ def:pub NeighborsView() -> JsxElement {
                     {len(wellbeing_history) > 0 and
                         <div className="max-h-[420px] overflow-y-auto rounded-lg border border-border">
                             {for (session_index, session) in enumerate(wellbeing_history) {
+                                session_id = session["id"] as str;
                                 session_stop = session["stop"] as str;
                                 session_feeling = session["feeling"] as str;
                                 session_notes = session["notes"] as str;
                                 session_net = session["net"] as int;
                                 net_class = "text-sm font-medium " + ("text-emerald-600" if session_net >= 0 else "text-rose-600");
-                                note_text = session_notes if session_notes != "" else "No notes recorded";
                                 <div key={session["id"] as str} className="border-b border-border last:border-b-0 p-4">
                                     <div className="flex items-start justify-between gap-4">
                                         <div>
@@ -451,13 +469,21 @@ def:pub NeighborsView() -> JsxElement {
                                     </div>
                                     <div className="mt-3 rounded-lg bg-muted/50 px-3 py-2.5">
                                         <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Notes</p>
-                                        <p className="mt-1.5 text-sm text-foreground">{note_text}</p>
+                                        <textarea
+                                            defaultValue={session_notes}
+                                            onBlur={lambda (e: any) { save_session_notes(session_id, e.target.value); }}
+                                            placeholder="Type notes about this session..."
+                                            rows={3}
+                                            className="mt-1.5 w-full resize-y rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
+                                        />
+                                        {saving_note_id == session_id and <p className="mt-1 text-xs text-muted-foreground">Saving...</p>}
                                         <span className={"mt-2 inline-block rounded-full px-2.5 py-1 text-xs font-medium " + feeling_class(session_feeling)}>{session_feeling}</span>
                                     </div>
                                 </div>
                             }}
                         </div>
                     }
+                    {note_error != "" and <p className="mt-3 text-sm text-destructive">{"Could not save notes: " + note_error}</p>}
                 </div>
             </div>
         }

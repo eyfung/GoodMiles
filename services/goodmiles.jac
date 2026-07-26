@@ -321,6 +321,20 @@ def:pub api_execute(neighbor_name: str, stop_name: str, feeling: str = "Not reco
     };
 }
 
+def:pub api_update_trip_notes(trip_id: str, notes: str) -> dict {
+    for t in [root-->][?:Trip] {
+        if jid(t) == trip_id {
+            t.notes = notes.strip();
+            return {
+                "status": "updated",
+                "id": trip_id,
+                "notes": t.notes
+            };
+        }
+    }
+    return {"error": "Session not found"};
+}
+
 def:pub api_trips() -> list[dict] {
     result: list[dict] = [];
     for t in [root-->][?:Trip] {
