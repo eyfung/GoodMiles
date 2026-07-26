@@ -10,7 +10,7 @@ import from "@hugeicons/core-free-icons" {
     Delete02Icon,
     UnfoldMoreIcon
 }
-sv import from "..services.goodmiles" { api_neighbors, api_add_neighbor }
+sv import from "..services.goodmiles" { api_neighbors, api_add_neighbor, api_delete_neighbor }
 
 def:pub NeighborsView() -> JsxElement {
     has neighbors: list[dict] = [];
@@ -23,6 +23,7 @@ def:pub NeighborsView() -> JsxElement {
     has new_zone: str = "";
     has adding: bool = False;
     has form_error: str = "";
+    has deleting_id: str = "";
 
     async can with entry {
         try {
@@ -79,6 +80,26 @@ def:pub NeighborsView() -> JsxElement {
             form_error = str(ex);
         }
         adding = False;
+    }
+
+    async def delete_person(person_id: str, person_name: str) -> None {
+        if not confirm("Delete " + person_name + "? This cannot be undone.") {
+            return;
+        }
+        deleting_id = person_id;
+        error = "";
+        try {
+            data: any = await api_delete_neighbor(person_id);
+            result = data as dict;
+            if "error" in result {
+                error = result["error"] as str;
+            } else {
+                neighbors = [n for n in neighbors if (n["id"] as str) != person_id];
+            }
+        } except Exception as ex {
+            error = str(ex);
+        }
+        deleting_id = "";
     }
 
     visible_neighbors: list[dict] = [];
@@ -200,7 +221,14 @@ def:pub NeighborsView() -> JsxElement {
                                         <Button variant="ghost" size="icon-sm" title={"Edit " + name_str + " name or home zone"}>
                                             <HugeiconsIcon icon={PencilEdit01Icon} strokeWidth={2} className="size-4" />
                                         </Button>
-                                        <Button variant="ghost" size="icon-sm" className="text-destructive hover:text-destructive" title={"Delete " + name_str}>
+                                        <Button
+                                            variant="ghost"
+                                            size="icon-sm"
+                                            className="text-destructive hover:text-destructive"
+                                            title={"Delete " + name_str}
+                                            disabled={deleting_id != ""}
+                                            onClick={lambda { delete_person(id_str, name_str); }}
+                                        >
                                             <HugeiconsIcon icon={Delete02Icon} strokeWidth={2} className="size-4" />
                                         </Button>
                                     </div>
