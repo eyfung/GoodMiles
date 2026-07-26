@@ -211,7 +211,7 @@ def:pub NeighborsView() -> JsxElement {
                         <span className="text-2xl font-semibold text-amber-700">{str(not_started_count)}</span>
                     </div>
                 </div>
-                <div className="rounded-xl border border-lime-200 bg-lime-50/70 p-4">
+                <div className="rounded-xl border border-lime-300 bg-lime-100 p-4">
                     <div className="flex items-center justify-between">
                         <div>
                             <p className="text-sm font-medium text-lime-900">In progress</p>
