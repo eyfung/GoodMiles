@@ -37,17 +37,8 @@ def cap(value: str) -> str {
     return value.capitalize();
 }
 
-def hop_label(dist: int) -> str {
-    if dist <= 0 {
-        return "same zone";
-    }
-    if dist >= 99 {
-        return "different area";
-    }
-    if dist == 1 {
-        return "1 zone away";
-    }
-    return str(dist) + " zones away";
+def miles_label(miles: float) -> str {
+    return f"{miles:.1f} mi away";
 }
 
 def:pub JobMatchView() -> JsxElement {
@@ -67,6 +58,8 @@ def:pub JobMatchView() -> JsxElement {
     has origin: dict = {};
     has recommended: dict = {};
     has matches: list[dict] = [];
+    has total_open_spots: int = 0;
+    has open_positions: int = 0;
     has has_results: bool = False;
 
     has error: str = "";
@@ -128,6 +121,8 @@ def:pub JobMatchView() -> JsxElement {
                 origin = res["origin"] as dict;
                 recommended = res["recommended"] as dict;
                 matches = res["matches"] as list[dict];
+                total_open_spots = res["total_open_spots"] as int;
+                open_positions = res["open_positions"] as int;
                 has_results = True;
             }
         } except Exception as e {
@@ -139,8 +134,9 @@ def:pub JobMatchView() -> JsxElement {
     if loading_stops {
         return <div className="p-6">
             <div className="mb-6">
-                <h1 className="text-2xl font-semibold tracking-tight">Job Match</h1>
-                <p className="text-muted-foreground text-sm mt-1">Assign a walk-in neighbor to the best open job nearby</p>
+                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">On-Demand AV as a Social Service</p>
+                <h1 className="text-2xl font-semibold tracking-tight mt-1">Job Match</h1>
+                <p className="text-muted-foreground text-sm mt-1">Coordinating a neighbor's next step from the ride to real work</p>
             </div>
             <Skeleton className="h-10 w-64" />
         </div>;
@@ -156,10 +152,13 @@ def:pub JobMatchView() -> JsxElement {
 
     return <div className="p-6 flex flex-col gap-6">
         <div>
-            <h1 className="text-2xl font-semibold tracking-tight">Job Match</h1>
-            <p className="text-muted-foreground text-sm mt-1">
-                Employers post open jobs; community-center staff assign a walk-in neighbor to the
-                best-fit one nearby. Enter a few notes and the agent recommends the next best job.
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">On-Demand AV as a Social Service</p>
+            <h1 className="text-2xl font-semibold tracking-tight mt-1">Job Match</h1>
+            <p className="text-muted-foreground text-sm mt-1 max-w-3xl">
+                The ride is only the start. When a neighbor like Maya reaches a community center, the
+                service coordinates the next step — connecting her to the best-fit open job nearby.
+                It reaches people the current system misses and automates the logistics, while a
+                caseworker keeps the human decision.
             </p>
         </div>
 
@@ -263,7 +262,9 @@ def:pub JobMatchView() -> JsxElement {
                 <CardHeader>
                     <CardTitle>Next best job for {seeker_name}</CardTitle>
                     <CardDescription>
-                        {"From " + origin_name + " (" + cap(origin_type) + " · " + cap(origin_zone) + ") — the agent's single best assignment."}
+                        {"From " + origin_name + " (" + cap(origin_type) + " · " + cap(origin_zone) + "), the agent found "
+                            + str(total_open_spots) + " open spots across " + str(open_positions)
+                            + " employers — here's the single best assignment."}
                     </CardDescription>
                 </CardHeader>
                 <CardContent>
@@ -277,13 +278,14 @@ def:pub JobMatchView() -> JsxElement {
                         </div>
                         <div className="flex flex-wrap items-center gap-2">
                             <Badge variant="outline" className="text-xs">{category_label(recommended["category"] as str)}</Badge>
-                            <Badge variant="secondary" className="text-xs">{cap(recommended["zone"] as str) + " · " + hop_label(recommended["zone_distance"] as int)}</Badge>
+                            <Badge variant="secondary" className="text-xs">{miles_label(recommended["distance_miles"] as float)}</Badge>
+                            <Badge variant="secondary" className="text-xs">{str(recommended["open_spots"] as int) + " open spots"}</Badge>
                             {(recommended["wage_hint"] as str) != "" and
                                 <Badge variant="secondary" className="text-xs">{recommended["wage_hint"] as str}</Badge>
                             }
                         </div>
                         {(recommended["address"] as str) != "" and
-                            <p className="text-muted-foreground text-xs">{recommended["address"] as str}</p>
+                            <p className="text-muted-foreground text-xs">📍 {recommended["address"] as str}</p>
                         }
                     </div>
                 </CardContent>
@@ -294,17 +296,18 @@ def:pub JobMatchView() -> JsxElement {
             <Card>
                 <CardHeader>
                     <CardTitle>Other open jobs</CardTitle>
-                    <CardDescription>Ranked by category fit, then center-to-center distance from {origin_name}.</CardDescription>
+                    <CardDescription>Ranked by category fit, then distance from {origin_name}.</CardDescription>
                 </CardHeader>
                 <CardContent>
                     <Table>
                         <TableHeader>
                             <TableRow>
                                 <TableHead>Job</TableHead>
+                                <TableHead>Place</TableHead>
                                 <TableHead>Category</TableHead>
-                                <TableHead>Route</TableHead>
+                                <TableHead className="text-right">Distance</TableHead>
+                                <TableHead className="text-right">Open spots</TableHead>
                                 <TableHead className="text-right">Wage</TableHead>
-                                <TableHead className="text-right">Fit</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -313,8 +316,9 @@ def:pub JobMatchView() -> JsxElement {
                                 m_title = m["title"] as str;
                                 m_employer = m["employer_name"] as str;
                                 m_category = m["category"] as str;
-                                m_zone = m["zone"] as str;
-                                m_dist = m["zone_distance"] as int;
+                                m_address = m["address"] as str;
+                                m_dist = m["distance_miles"] as float;
+                                m_spots = m["open_spots"] as int;
                                 m_wage = m["wage_hint"] as str;
                                 m_match = m["category_match"] as bool;
                                 <TableRow key={m_id}>
@@ -322,15 +326,14 @@ def:pub JobMatchView() -> JsxElement {
                                         <p className="font-medium">{m_title}</p>
                                         <p className="text-muted-foreground text-xs">{m_employer}</p>
                                     </TableCell>
+                                    <TableCell className="text-muted-foreground text-xs max-w-48">{m_address}</TableCell>
                                     <TableCell>
                                         <Badge variant="outline" className="text-xs">{category_label(m_category)}</Badge>
                                     </TableCell>
-                                    <TableCell className="text-sm">{cap(m_zone) + " · " + hop_label(m_dist)}</TableCell>
+                                    <TableCell className="text-right text-sm">{miles_label(m_dist)}</TableCell>
+                                    <TableCell className="text-right text-sm">{str(m_spots)}</TableCell>
                                     <TableCell className="text-right text-muted-foreground text-sm">
                                         {m_wage if m_wage != "" else "—"}
-                                    </TableCell>
-                                    <TableCell className="text-right">
-                                        {m_match and <Badge className="text-xs">Best fit</Badge> or <span></span>}
                                     </TableCell>
                                 </TableRow>
                             }}

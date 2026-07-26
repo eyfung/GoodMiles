@@ -11,30 +11,31 @@ test "keyword classifier maps notes to categories" {
     assert _classify_keyword("hotel housekeeping for three years") == JobCategory.HOSPITALITY;
 }
 
-test "zone_distance grows with zone separation" {
-    assert zone_distance("north", "north") == 0;
-    assert zone_distance("north", "central") == 1;
-    assert zone_distance("north", "south") == 2;
-    assert zone_distance("north", "south") > zone_distance("north", "central");
-    assert zone_distance("north", "nowhere") == 99;
+test "distance in miles is directionally sane" {
+    d_same = calculate_distance_miles(37.7749, -122.4194, 37.7749, -122.4194);
+    assert d_same < 0.01;
+
+    d_near = calculate_distance_miles(37.7749, -122.4194, 37.7839, -122.4194);
+    d_far = calculate_distance_miles(37.7749, -122.4194, 34.0522, -118.2437);
+    assert d_far > d_near;
 }
 
-test "find_best_jobs ranks category match before zone, then by zone proximity" {
+test "find_best_jobs ranks category match first, then by distance, and tallies open spots" {
     stop = root ++> ServiceStop(
         name="Test Stop", stop_type="jobs", zone="north", base_cost=0, bonus_on_visit=0
     );
 
-    same_match = root ++> Job(
-        title="Same-zone Kitchen Job", employer_name="Test Co A", category=JobCategory.KITCHEN,
-        address="", zone="north", wage_hint=""
+    near_match = root ++> Job(
+        title="Near Kitchen Job", employer_name="Test Co A", category=JobCategory.KITCHEN,
+        address="1 Near St", zone="north", lat=37.7855, lng=-122.4115, open_spots=2, wage_hint=""
     );
     far_match = root ++> Job(
         title="Far Kitchen Job", employer_name="Test Co B", category=JobCategory.KITCHEN,
-        address="", zone="south", wage_hint=""
+        address="2 Far St", zone="south", lat=37.9000, lng=-122.6000, open_spots=3, wage_hint=""
     );
-    same_nomatch = root ++> Job(
-        title="Same-zone Warehouse Job", employer_name="Test Co C", category=JobCategory.WAREHOUSE,
-        address="", zone="north", wage_hint=""
+    near_nomatch = root ++> Job(
+        title="Near Warehouse Job", employer_name="Test Co C", category=JobCategory.WAREHOUSE,
+        address="3 Near Ave", zone="north", lat=37.7860, lng=-122.4120, open_spots=5, wage_hint=""
     );
 
     seeker = root ++> JobSeeker(name="Test Seeker", notes="kitchen experience", category=JobCategory.KITCHEN);
@@ -45,15 +46,20 @@ test "find_best_jobs ranks category match before zone, then by zone proximity" {
     report0 = result.reports[0];
     matches = report0["matches"];
 
-    target_ids = [jid(same_match), jid(far_match), jid(same_nomatch)];
+    target_ids = [jid(near_match), jid(far_match), jid(near_nomatch)];
     filtered = [m for m in matches if (m["job_id"] as str) in target_ids];
 
     assert len(filtered) == 3;
-    assert (filtered[0]["job_id"] as str) == jid(same_match);
+    assert (filtered[0]["job_id"] as str) == jid(near_match);
     assert (filtered[1]["job_id"] as str) == jid(far_match);
-    assert (filtered[2]["job_id"] as str) == jid(same_nomatch);
+    assert (filtered[2]["job_id"] as str) == jid(near_nomatch);
 
-    # Report also surfaces the origin center and a single recommended hop.
+    # Report surfaces the origin center, a single recommended hop, and spot tallies.
     assert (report0["origin"]["name"] as str) == "Test Stop";
-    assert (report0["recommended"]["job_id"] as str) == jid(same_match);
+    assert (report0["recommended"]["job_id"] as str) == jid(near_match);
+    # near_match carries a real place string and a distance in miles.
+    assert "Test Co A" in (filtered[0]["place"] as str);
+    assert (filtered[0]["distance_miles"] as float) >= 0.0;
+    # total open spots counts every open job the walker found (>= our 3 test spots).
+    assert (report0["total_open_spots"] as int) >= 10;
 }
