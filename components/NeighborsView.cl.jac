@@ -29,6 +29,8 @@ def:pub NeighborsView() -> JsxElement {
     has editing_note_id: str = "";
     has editing_note_text: str = "";
     has saving_note_id: str = "";
+    has saved_note_id: str = "";
+    has saved_note_at: str = "";
     has note_error: str = "";
 
     async can with entry {
@@ -113,6 +115,8 @@ def:pub NeighborsView() -> JsxElement {
         wellbeing_history = history;
         editing_note_id = "";
         editing_note_text = "";
+        saved_note_id = "";
+        saved_note_at = "";
     }
 
     def close_wellbeing(_e: MouseEvent) {
@@ -120,12 +124,18 @@ def:pub NeighborsView() -> JsxElement {
         wellbeing_history = [];
         editing_note_id = "";
         editing_note_text = "";
+        saved_note_id = "";
+        saved_note_at = "";
         note_error = "";
     }
 
     def update_note_draft(session_id: str, notes: str) {
         editing_note_id = session_id;
         editing_note_text = notes;
+        if saved_note_id == session_id {
+            saved_note_id = "";
+            saved_note_at = "";
+        }
     }
 
     async def save_session_notes(session_id: str, notes: str) -> None {
@@ -136,6 +146,19 @@ def:pub NeighborsView() -> JsxElement {
             result = data as dict;
             if "error" in result {
                 note_error = result["error"] as str;
+            } else {
+                saved_note_id = session_id;
+                saved_note_at = result["notes_saved_at"] as str;
+                refreshed: any = await api_neighbors();
+                refreshed_neighbors = refreshed as list[dict];
+                neighbors = refreshed_neighbors;
+                for person in refreshed_neighbors {
+                    if (person["name"] as str) == wellbeing_person {
+                        wellbeing_history = person["wellbeing_history"] as list[dict];
+                    }
+                }
+                editing_note_id = "";
+                editing_note_text = "";
             }
         } except Exception as ex {
             note_error = str(ex);
@@ -466,7 +489,10 @@ def:pub NeighborsView() -> JsxElement {
                                 session_stop = session["stop"] as str;
                                 session_feeling = session["feeling"] as str;
                                 session_notes = session["notes"] as str;
+                                session_saved_at = session["notes_saved_at"] as str;
                                 displayed_notes = editing_note_text if editing_note_id == session_id else session_notes;
+                                displayed_saved_at = saved_note_at if saved_note_id == session_id else session_saved_at;
+                                has_unsaved_changes = editing_note_id == session_id;
                                 session_net = session["net"] as int;
                                 net_class = "text-sm font-medium " + ("text-emerald-600" if session_net >= 0 else "text-rose-600");
                                 <div key={session["id"] as str} className="border-b border-border last:border-b-0 p-4">
@@ -499,12 +525,15 @@ def:pub NeighborsView() -> JsxElement {
                                             </div>
                                             <Button
                                                 size="sm"
-                                                disabled={saving_note_id != ""}
+                                                disabled={saving_note_id != "" or (not has_unsaved_changes and displayed_saved_at != "")}
                                                 onClick={lambda { save_session_notes(session_id, displayed_notes); }}
                                             >
-                                                {("Saving..." if saving_note_id == session_id else "Save")}
+                                                {("Saving..." if saving_note_id == session_id else ("Saved" if not has_unsaved_changes and displayed_saved_at != "" else "Save"))}
                                             </Button>
                                         </div>
+                                        {not has_unsaved_changes and displayed_saved_at != "" and
+                                            <p className="mt-1 text-right text-xs text-muted-foreground">{"Saved " + displayed_saved_at}</p>
+                                        }
                                     </div>
                                 </div>
                             }}

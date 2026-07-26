@@ -1,4 +1,5 @@
 # GoodMiles — Graph nodes, seed data, allocation engine, API endpoints
+import from datetime { datetime }
 
 # ===========================
 # Node definitions
@@ -29,6 +30,7 @@ node Trip {
     has bonus: int;
     has feeling: str = "Not recorded";
     has notes: str = "";
+    has notes_saved_at: str = "";
 }
 
 node Seeded {
@@ -125,7 +127,8 @@ def:pub api_neighbors() -> list[dict] {
                     "bonus": t.bonus,
                     "net": t.bonus - t.cost,
                     "feeling": t.feeling,
-                    "notes": getattr(t, "notes", "")
+                    "notes": getattr(t, "notes", ""),
+                    "notes_saved_at": getattr(t, "notes_saved_at", "")
                 }];
             }
         }
@@ -306,7 +309,8 @@ def:pub api_execute(neighbor_name: str, stop_name: str, feeling: str = "Not reco
         cost=cost,
         bonus=bonus,
         feeling=recorded_feeling,
-        notes=notes.strip()
+        notes=notes,
+        notes_saved_at=datetime.now().strftime("%m/%d/%Y %H:%M")
     );
 
     return {
@@ -316,7 +320,7 @@ def:pub api_execute(neighbor_name: str, stop_name: str, feeling: str = "Not reco
         "cost": cost,
         "bonus": bonus,
         "feeling": recorded_feeling,
-        "notes": notes.strip(),
+        "notes": notes,
         "new_balance": neighbor.points_balance
     };
 }
@@ -324,11 +328,14 @@ def:pub api_execute(neighbor_name: str, stop_name: str, feeling: str = "Not reco
 def:pub api_update_trip_notes(trip_id: str, notes: str) -> dict {
     for t in [root-->][?:Trip] {
         if jid(t) == trip_id {
-            t.notes = notes.strip();
+            saved_at = datetime.now().strftime("%m/%d/%Y %H:%M");
+            t.notes = notes;
+            t.notes_saved_at = saved_at;
             return {
                 "status": "updated",
                 "id": trip_id,
-                "notes": t.notes
+                "notes": t.notes,
+                "notes_saved_at": saved_at
             };
         }
     }
@@ -345,7 +352,8 @@ def:pub api_trips() -> list[dict] {
             "cost": t.cost,
             "bonus": t.bonus,
             "feeling": t.feeling,
-            "notes": getattr(t, "notes", "")
+            "notes": getattr(t, "notes", ""),
+            "notes_saved_at": getattr(t, "notes_saved_at", "")
         }];
     }
     return result;
