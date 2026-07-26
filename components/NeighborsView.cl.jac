@@ -1,5 +1,3 @@
-import from ".ui.card" { Card, CardHeader, CardTitle, CardDescription, CardContent }
-import from ".ui.badge" { Badge }
 import from ".ui.skeleton" { Skeleton }
 sv import from "..services.goodmiles" { api_neighbors }
 
@@ -19,42 +17,38 @@ def:pub NeighborsView() -> JsxElement {
     }
 
     if loading {
-        return <div className="p-6">
-            <div className="mb-6">
-                <h1 className="text-2xl font-semibold tracking-tight">Neighbors</h1>
-                <p className="text-muted-foreground text-sm mt-1">Community members in the mobility program</p>
+        return <div className="p-8">
+            <div className="mb-8">
+                <h1 className="text-[23px] font-semibold tracking-[-0.44px] leading-[25px]" style={{"color": "#343433"}}>Neighbors</h1>
+                <p className="text-[15px] mt-1" style={{"color": "#7e7e7d"}}>Community members in the mobility program</p>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                 {for _ in [0, 1, 2, 3] {
-                    <Card key={str(_)}>
-                        <CardHeader>
-                            <Skeleton className="h-5 w-24" />
-                            <Skeleton className="h-4 w-16 mt-1" />
-                        </CardHeader>
-                        <CardContent>
-                            <Skeleton className="h-8 w-20 mb-3" />
-                            <Skeleton className="h-4 w-32" />
-                        </CardContent>
-                    </Card>
+                    <div key={str(_)} className="rounded-[10px] p-8" style={{"backgroundColor": "#ffffff", "boxShadow": "inset 0 0 0 1px #f2f0ed"}}>
+                        <Skeleton className="h-4 w-20 mb-1" />
+                        <Skeleton className="h-3 w-16 mb-6" />
+                        <Skeleton className="h-8 w-24 mb-4" />
+                        <Skeleton className="h-3 w-32" />
+                    </div>
                 }}
             </div>
         </div>;
     }
 
     if error != "" {
-        return <div className="p-6">
-            <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-4 text-destructive text-sm">
+        return <div className="p-8">
+            <div className="rounded-[10px] p-4 text-[14px]" style={{"backgroundColor": "#fff0f0", "color": "#ff2b3a", "boxShadow": "inset 0 0 0 1px #ffd0d0"}}>
                 Failed to load neighbors: {error}
             </div>
         </div>;
     }
 
-    return <div className="p-6">
-        <div className="mb-6">
-            <h1 className="text-2xl font-semibold tracking-tight">Neighbors</h1>
-            <p className="text-muted-foreground text-sm mt-1">Community members in the mobility program</p>
+    return <div className="p-8">
+        <div className="mb-8">
+            <h1 className="text-[23px] font-semibold tracking-[-0.44px] leading-[25px]" style={{"color": "#343433"}}>Neighbors</h1>
+            <p className="text-[15px] mt-1" style={{"color": "#7e7e7d"}}>Community members in the mobility program</p>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
             {for n in neighbors {
                 bal = n["points_balance"] as int;
                 earned = n["points_earned"] as int;
@@ -62,30 +56,28 @@ def:pub NeighborsView() -> JsxElement {
                 zone_str = n["home_zone"] as str;
                 name_str = n["name"] as str;
                 id_str = n["id"] as str;
-                <Card key={id_str} className="hover:shadow-md transition-shadow">
-                    <CardHeader>
-                        <CardTitle className="text-lg">{name_str}</CardTitle>
-                        <CardDescription>
-                            <Badge variant="outline" className="text-xs capitalize">{zone_str} zone</Badge>
-                        </CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="mb-3">
-                            <span className="text-3xl font-bold text-primary">{str(bal)}</span>
-                            <span className="text-muted-foreground text-sm ml-1">pts balance</span>
+                <div key={id_str} className="rounded-[10px] p-6" style={{"backgroundColor": "#ffffff", "boxShadow": "inset 0 0 0 1px #f2f0ed"}}>
+                    <div className="mb-4">
+                        <p className="text-[15px] font-semibold" style={{"color": "#343433"}}>{name_str}</p>
+                        <span className="inline-block mt-1 px-2 py-0.5 rounded-[6px] text-[11px] font-medium capitalize" style={{"backgroundColor": "#f2f0ed", "color": "#474645"}}>
+                            {zone_str} zone
+                        </span>
+                    </div>
+                    <div className="mb-4">
+                        <span className="text-[32px] font-semibold tracking-[-0.5px]" style={{"color": "#121212"}}>{str(bal)}</span>
+                        <span className="text-[13px] ml-1.5" style={{"color": "#7e7e7d"}}>pts</span>
+                    </div>
+                    <div className="flex gap-4 text-[13px]">
+                        <div>
+                            <span className="font-medium" style={{"color": "#00c978"}}>+{str(earned)}</span>
+                            <span className="ml-1" style={{"color": "#7e7e7d"}}>earned</span>
                         </div>
-                        <div className="flex gap-4 text-sm">
-                            <div>
-                                <span className="text-emerald-600 font-medium">+{str(earned)}</span>
-                                <span className="text-muted-foreground ml-1">earned</span>
-                            </div>
-                            <div>
-                                <span className="text-rose-500 font-medium">-{str(spent)}</span>
-                                <span className="text-muted-foreground ml-1">spent</span>
-                            </div>
+                        <div>
+                            <span className="font-medium" style={{"color": "#ff3e00"}}>-{str(spent)}</span>
+                            <span className="ml-1" style={{"color": "#7e7e7d"}}>spent</span>
                         </div>
-                    </CardContent>
-                </Card>
+                    </div>
+                </div>
             }}
         </div>
     </div>;
