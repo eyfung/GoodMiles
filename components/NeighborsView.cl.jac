@@ -171,7 +171,7 @@ def:pub NeighborsView() -> JsxElement {
 
         {not loading and error == "" and
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
-                <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-4">
+                <div className="rounded-xl border border-amber-300 bg-amber-100 p-4">
                     <div className="flex items-center justify-between">
                         <div>
                             <p className="text-sm font-medium text-amber-900">Not started</p>
@@ -189,7 +189,7 @@ def:pub NeighborsView() -> JsxElement {
                         <span className="text-2xl font-semibold text-lime-700">{str(in_progress_count)}</span>
                     </div>
                 </div>
-                <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-4">
+                <div className="rounded-xl border border-emerald-300 bg-emerald-100 p-4">
                     <div className="flex items-center justify-between">
                         <div>
                             <p className="text-sm font-medium text-emerald-900">Completed</p>
