@@ -421,7 +421,7 @@ def:pub NeighborsView() -> JsxElement {
                                     {str(len(wellbeing_history)) + (" session" if len(wellbeing_history) == 1 else " sessions")}
                                 </span>
                             </div>
-                            <p className="text-sm text-muted-foreground mt-1">Session history, points gained, and check-in notes.</p>
+                            <p className="text-sm text-muted-foreground mt-1">Session history, net points, and check-in notes.</p>
                         </div>
                         <Button variant="ghost" size="sm" onClick={close_wellbeing}>Close</Button>
                     </div>
@@ -435,9 +435,10 @@ def:pub NeighborsView() -> JsxElement {
                             {for (session_index, session) in enumerate(wellbeing_history) {
                                 session_stop = session["stop"] as str;
                                 session_feeling = session["feeling"] as str;
+                                session_notes = session["notes"] as str;
                                 session_net = session["net"] as int;
                                 net_class = "text-sm font-medium " + ("text-emerald-600" if session_net >= 0 else "text-rose-600");
-                                note_text = session_feeling if session_feeling != "Not recorded" else "No notes recorded";
+                                note_text = session_notes if session_notes != "" else "No notes recorded";
                                 <div key={session["id"] as str} className="border-b border-border last:border-b-0 p-4">
                                     <div className="flex items-start justify-between gap-4">
                                         <div>
@@ -450,9 +451,8 @@ def:pub NeighborsView() -> JsxElement {
                                     </div>
                                     <div className="mt-3 rounded-lg bg-muted/50 px-3 py-2.5">
                                         <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Notes</p>
-                                        <span className={"mt-1.5 inline-block rounded-full px-2.5 py-1 text-xs font-medium " + feeling_class(session_feeling)}>
-                                            {note_text}
-                                        </span>
+                                        <p className="mt-1.5 text-sm text-foreground">{note_text}</p>
+                                        <span className={"mt-2 inline-block rounded-full px-2.5 py-1 text-xs font-medium " + feeling_class(session_feeling)}>{session_feeling}</span>
                                     </div>
                                 </div>
                             }}

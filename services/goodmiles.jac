@@ -28,6 +28,7 @@ node Trip {
     has cost: int;
     has bonus: int;
     has feeling: str = "Not recorded";
+    has notes: str = "";
 }
 
 node Seeded {
@@ -123,7 +124,8 @@ def:pub api_neighbors() -> list[dict] {
                     "cost": t.cost,
                     "bonus": t.bonus,
                     "net": t.bonus - t.cost,
-                    "feeling": t.feeling
+                    "feeling": t.feeling,
+                    "notes": t.notes
                 }];
             }
         }
@@ -273,7 +275,7 @@ def:pub api_optimize(neighbor_name: str) -> dict {
     };
 }
 
-def:pub api_execute(neighbor_name: str, stop_name: str, feeling: str = "Not recorded") -> dict {
+def:pub api_execute(neighbor_name: str, stop_name: str, feeling: str = "Not recorded", notes: str = "") -> dict {
     neighbor = get_neighbor(neighbor_name);
     stop = get_stop(stop_name);
 
@@ -303,7 +305,8 @@ def:pub api_execute(neighbor_name: str, stop_name: str, feeling: str = "Not reco
         stop_name=stop.name,
         cost=cost,
         bonus=bonus,
-        feeling=recorded_feeling
+        feeling=recorded_feeling,
+        notes=notes.strip()
     );
 
     return {
@@ -313,6 +316,7 @@ def:pub api_execute(neighbor_name: str, stop_name: str, feeling: str = "Not reco
         "cost": cost,
         "bonus": bonus,
         "feeling": recorded_feeling,
+        "notes": notes.strip(),
         "new_balance": neighbor.points_balance
     };
 }
@@ -326,7 +330,8 @@ def:pub api_trips() -> list[dict] {
             "stop": t.stop_name,
             "cost": t.cost,
             "bonus": t.bonus,
-            "feeling": t.feeling
+            "feeling": t.feeling,
+            "notes": t.notes
         }];
     }
     return result;

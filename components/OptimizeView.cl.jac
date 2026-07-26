@@ -11,6 +11,8 @@ def:pub OptimizeView() -> JsxElement {
     has optimizing: bool = False;
     has executing: str = "";
     has pending_stop: str = "";
+    has selected_feeling: str = "";
+    has checkin_notes: str = "";
     has exec_result: str = "";
     has exec_error: str = "";
     has error: str = "";
@@ -39,13 +41,15 @@ def:pub OptimizeView() -> JsxElement {
         optimizing = False;
     }
 
-    async def handle_execute(stop_name: str, feeling: str) -> None {
+    async def handle_execute(stop_name: str, feeling: str, notes: str) -> None {
         pending_stop = "";
+        selected_feeling = "";
+        checkin_notes = "";
         executing = stop_name;
         exec_result = "";
         exec_error = "";
         try {
-            data: any = await api_execute(selected_neighbor, stop_name, feeling);
+            data: any = await api_execute(selected_neighbor, stop_name, feeling, notes);
             res = data as dict;
             if "error" in res {
                 exec_error = res["error"] as str;
@@ -179,7 +183,11 @@ def:pub OptimizeView() -> JsxElement {
                                     <td className="px-6 py-3.5 text-right">
                                         <button
                                             disabled={is_executing or executing != ""}
-                                            onClick={lambda { pending_stop = p_stop; }}
+                                            onClick={lambda {
+                                                pending_stop = p_stop;
+                                                selected_feeling = "";
+                                                checkin_notes = "";
+                                            }}
                                             className="flex items-center gap-1.5 px-4 py-1.5 text-[12px] font-semibold ml-auto transition-opacity disabled:opacity-40"
                                             style={{"backgroundColor": "#121212", "color": "#fbfaf9", "borderRadius": "9999px", "border": "none", "cursor": "pointer"}}
                                         >
@@ -206,16 +214,40 @@ def:pub OptimizeView() -> JsxElement {
                         {for feeling_option in ["Great", "Good", "Okay", "Struggling", "Distressed"] {
                             <button
                                 key={feeling_option}
-                                onClick={lambda { handle_execute(pending_stop, feeling_option); }}
-                                className="w-full rounded-[10px] border px-4 py-2.5 text-left text-[14px] font-medium hover:bg-[#f6f4ef]"
+                                onClick={lambda { selected_feeling = feeling_option; }}
+                                className={"w-full rounded-[10px] border px-4 py-2.5 text-left text-[14px] font-medium hover:bg-[#f6f4ef] " + ("bg-[#eef8f1]" if selected_feeling == feeling_option else "")}
                                 style={{"borderColor": "#e5e2dd", "color": "#343433"}}
                             >
                                 {feeling_option}
                             </button>
                         }}
                     </div>
+                    <div className="mt-4">
+                        <label htmlFor="checkin-notes" className="text-[13px] font-medium" style={{"color": "#343433"}}>Notes</label>
+                        <textarea
+                            id="checkin-notes"
+                            value={checkin_notes}
+                            onChange={lambda (e: any) { checkin_notes = e.target.value; }}
+                            placeholder="Add notes about this session..."
+                            rows={3}
+                            className="mt-1.5 w-full resize-none rounded-[10px] border px-3 py-2.5 text-[14px] outline-none focus:ring-2"
+                            style={{"borderColor": "#e5e2dd", "color": "#343433"}}
+                        />
+                    </div>
                     <button
-                        onClick={lambda { pending_stop = ""; }}
+                        onClick={lambda { handle_execute(pending_stop, selected_feeling, checkin_notes); }}
+                        disabled={selected_feeling == ""}
+                        className="mt-4 w-full rounded-[10px] px-4 py-2.5 text-[14px] font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
+                        style={{"backgroundColor": "#087443"}}
+                    >
+                        Save Check-In
+                    </button>
+                    <button
+                        onClick={lambda {
+                            pending_stop = "";
+                            selected_feeling = "";
+                            checkin_notes = "";
+                        }}
                         className="mt-4 w-full text-[13px] font-medium"
                         style={{"color": "#7e7e7d"}}
                     >
