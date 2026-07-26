@@ -1,0 +1,154 @@
+{
+  "schema_version": "1",
+  "ui": {
+    "app_type": "dashboard",
+    "nav_pattern": "sidebar",
+    "pages": [
+      {
+        "name": "NeighborsView",
+        "route": "/",
+        "title": "Neighbors \u2014 GoodMiles"
+      },
+      {
+        "name": "ServiceStopsView",
+        "route": "/stops",
+        "title": "Service Stops \u2014 GoodMiles"
+      },
+      {
+        "name": "OptimizeView",
+        "route": "/optimize",
+        "title": "Optimize & Execute \u2014 GoodMiles"
+      }
+    ],
+    "primitive_components": [
+      "card",
+      "button",
+      "badge",
+      "table",
+      "select",
+      "separator",
+      "skeleton",
+      "sonner"
+    ],
+    "style": "nova",
+    "base_color": "neutral",
+    "theme": "emerald",
+    "font": "inter",
+    "radius": "default",
+    "menu_accent": "subtle",
+    "auth_required": false,
+    "backend_required": true,
+    "ai_required": false
+  },
+  "files": [
+    {
+      "path": "services/goodmilesService.sv.jac",
+      "layer": "service",
+      "purpose": "Defines Neighbor, ServiceStop, AV, Trip nodes; seed data; allocation logic; execute_trip; Optimize walker; and API endpoints api_neighbors, api_stops, api_optimize, api_execute.",
+      "exports": [
+        "api_neighbors",
+        "api_stops",
+        "api_optimize",
+        "api_execute"
+      ],
+      "imports_from_plan": [],
+      "write_order": 1,
+      "status": "pending"
+    },
+    {
+      "path": "components/NeighborsView.cl.jac",
+      "layer": "page",
+      "purpose": "Displays a grid of cards for each neighbor showing points balance, zone, earned and spent totals.",
+      "exports": [
+        "NeighborsView"
+      ],
+      "imports_from_plan": [
+        "api_neighbors"
+      ],
+      "write_order": 2,
+      "status": "done"
+    },
+    {
+      "path": "components/ServiceStopsView.cl.jac",
+      "layer": "page",
+      "purpose": "Displays a table of all service stops with columns for name, type, zone, cost, and bonus points.",
+      "exports": [
+        "ServiceStopsView"
+      ],
+      "imports_from_plan": [
+        "api_stops"
+      ],
+      "write_order": 3,
+      "status": "done"
+    },
+    {
+      "path": "components/OptimizeView.cl.jac",
+      "layer": "page",
+      "purpose": "Lets the user select a neighbor, view the optimized route plan returned by the Optimize walker, and execute individual trips.",
+      "exports": [
+        "OptimizeView"
+      ],
+      "imports_from_plan": [
+        "api_neighbors",
+        "api_optimize",
+        "api_execute"
+      ],
+      "write_order": 4,
+      "status": "done"
+    },
+    {
+      "path": "main.jac",
+      "layer": "shell",
+      "purpose": "App shell with sidebar navigation and React Router routes wiring NeighborsView, ServiceStopsView, and OptimizeView.",
+      "exports": [
+        "app"
+      ],
+      "imports_from_plan": [
+        "NeighborsView",
+        "ServiceStopsView",
+        "OptimizeView"
+      ],
+      "write_order": 5,
+      "status": "done"
+    }
+  ],
+  "write_order": [
+    "services/goodmilesService.sv.jac",
+    "components/NeighborsView.cl.jac",
+    "components/ServiceStopsView.cl.jac",
+    "components/OptimizeView.cl.jac",
+    "main.jac"
+  ],
+  "dependency_graph": {
+    "components/NeighborsView.cl.jac": [
+      "services/goodmilesService.sv.jac"
+    ],
+    "components/ServiceStopsView.cl.jac": [
+      "services/goodmilesService.sv.jac"
+    ],
+    "components/OptimizeView.cl.jac": [
+      "services/goodmilesService.sv.jac"
+    ],
+    "main.jac": [
+      "components/NeighborsView.cl.jac",
+      "components/ServiceStopsView.cl.jac",
+      "components/OptimizeView.cl.jac"
+    ]
+  },
+  "remove_from_template": [
+    "frontend.cl.jac"
+  ],
+  "verify": {
+    "flow": "api_execute",
+    "route": "/optimize",
+    "steps": "Select a neighbor from the dropdown, click Optimize to see the route plan, then click Execute on one trip \u2014 the neighbor's points balance updates in the result."
+  },
+  "build_log": {
+    "overall_status": "pending",
+    "last_action": "",
+    "issues": [],
+    "learnings": []
+  },
+  "confidence": 0.88,
+  "assumption": "The GoodMiles allocation logic (seed data, point scoring, AV routing) can be self-contained in a single service file with in-memory graph nodes off root, without requiring an external database or the original Python source."
+}
