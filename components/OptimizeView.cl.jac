@@ -1,8 +1,4 @@
-import from ".ui.card" { Card, CardHeader, CardTitle, CardDescription, CardContent }
-import from ".ui.button" { Button }
-import from ".ui.badge" { Badge }
 import from ".ui.select" { Select, SelectTrigger, SelectContent, SelectGroup, SelectItem, SelectValue }
-import from ".ui.table" { Table, TableHeader, TableBody, TableRow, TableHead, TableCell }
 import from ".ui.skeleton" { Skeleton }
 import from ".ui.spinner" { Spinner }
 sv import from "..services.goodmiles" { api_neighbors, api_optimize, api_execute }
@@ -68,10 +64,10 @@ def:pub OptimizeView() -> JsxElement {
     }
 
     if loading_neighbors {
-        return <div className="p-6">
-            <div className="mb-6">
-                <h1 className="text-2xl font-semibold tracking-tight">Optimize Route</h1>
-                <p className="text-muted-foreground text-sm mt-1">Find the best route for a neighbor</p>
+        return <div className="p-8">
+            <div className="mb-8">
+                <h1 className="text-[23px] font-semibold tracking-[-0.44px] leading-[25px]" style={{"color": "#343433"}}>Optimize Route</h1>
+                <p className="text-[15px] mt-1" style={{"color": "#7e7e7d"}}>Find the best route for a neighbor</p>
             </div>
             <Skeleton className="h-10 w-64" />
         </div>;
@@ -84,120 +80,116 @@ def:pub OptimizeView() -> JsxElement {
         plan = plan_raw as list[dict];
     }
 
-    return <div className="p-6 flex flex-col gap-6">
+    return <div className="p-8 flex flex-col gap-6">
         <div>
-            <h1 className="text-2xl font-semibold tracking-tight">Optimize Route</h1>
-            <p className="text-muted-foreground text-sm mt-1">Find the best route for a neighbor and execute trips</p>
+            <h1 className="text-[23px] font-semibold tracking-[-0.44px] leading-[25px]" style={{"color": "#343433"}}>Optimize Route</h1>
+            <p className="text-[15px] mt-1" style={{"color": "#7e7e7d"}}>Find the best route for a neighbor and execute trips</p>
         </div>
 
-        <Card>
-            <CardHeader>
-                <CardTitle>Select Neighbor</CardTitle>
-                <CardDescription>Choose a neighbor to optimize their mobility route</CardDescription>
-            </CardHeader>
-            <CardContent>
-                <div className="flex flex-wrap gap-3 items-end">
-                    <div className="w-64">
-                        <Select onValueChange={lambda (v: str) { selected_neighbor = v; route = {}; exec_result = ""; exec_error = ""; }}>
-                            <SelectTrigger>
-                                <SelectValue placeholder="Select a neighbor..." />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectGroup>
-                                    {for n in neighbors {
-                                        n_name = n["name"] as str;
-                                        n_bal = n["points_balance"] as int;
-                                        n_zone = n["home_zone"] as str;
-                                        <SelectItem key={n_name} value={n_name}>
-                                            {n_name + " — " + str(n_bal) + " pts (" + n_zone + ")"}
-                                        </SelectItem>
-                                    }}
-                                </SelectGroup>
-                            </SelectContent>
-                        </Select>
-                    </div>
-                    <Button
-                        onClick={lambda { handle_optimize(); }}
-                        disabled={selected_neighbor == "" or optimizing}
-                    >
-                        {optimizing and <Spinner className="size-4 mr-2" /> or <span></span>}
-                        {optimizing and "Optimizing..." or "Optimize Route"}
-                    </Button>
+        <div className="rounded-[10px] p-6" style={{"backgroundColor": "#ffffff", "boxShadow": "inset 0 0 0 1px #f2f0ed"}}>
+            <p className="text-[15px] font-semibold mb-1" style={{"color": "#343433"}}>Select Neighbor</p>
+            <p className="text-[13px] mb-4" style={{"color": "#7e7e7d"}}>Choose a neighbor to optimize their mobility route</p>
+            <div className="flex flex-wrap gap-3 items-center">
+                <div className="w-64">
+                    <Select onValueChange={lambda (v: str) { selected_neighbor = v; route = {}; exec_result = ""; exec_error = ""; }}>
+                        <SelectTrigger className="rounded-[9999px] text-[13px]" style={{"backgroundColor": "#f6f4ef", "border": "none", "color": "#343433"}}>
+                            <SelectValue placeholder="Select a neighbor..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectGroup>
+                                {for n in neighbors {
+                                    n_name = n["name"] as str;
+                                    n_bal = n["points_balance"] as int;
+                                    n_zone = n["home_zone"] as str;
+                                    <SelectItem key={n_name} value={n_name}>
+                                        {n_name + " — " + str(n_bal) + " pts (" + n_zone + ")"}
+                                    </SelectItem>
+                                }}
+                            </SelectGroup>
+                        </SelectContent>
+                    </Select>
                 </div>
-            </CardContent>
-        </Card>
+                <button
+                    onClick={lambda { handle_optimize(); }}
+                    disabled={selected_neighbor == "" or optimizing}
+                    className="flex items-center gap-2 px-5 py-2 text-[13px] font-semibold transition-opacity disabled:opacity-40"
+                    style={{"backgroundColor": "#121212", "color": "#fbfaf9", "borderRadius": "9999px", "border": "none", "cursor": "pointer"}}
+                >
+                    {optimizing and <Spinner className="size-3" /> or <span></span>}
+                    {optimizing and "Optimizing..." or "Optimize Route"}
+                </button>
+            </div>
+        </div>
 
         {exec_result != "" and
-            <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-emerald-800 text-sm">
+            <div className="rounded-[10px] px-5 py-3.5 text-[14px]" style={{"backgroundColor": "#e6fff5", "color": "#00c978", "boxShadow": "inset 0 0 0 1px #b3f0d8"}}>
                 {exec_result}
             </div>
         }
         {exec_error != "" and
-            <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-4 text-destructive text-sm">
+            <div className="rounded-[10px] px-5 py-3.5 text-[14px]" style={{"backgroundColor": "#fff0f0", "color": "#ff2b3a", "boxShadow": "inset 0 0 0 1px #ffd0d0"}}>
                 {exec_error}
             </div>
         }
 
         {has_route and
-            <Card>
-                <CardHeader>
-                    <CardTitle>Route Plan for {route["neighbor"] as str}</CardTitle>
-                    <CardDescription>
-                        {"Balance: " + str(route["balance"] as int) + " pts | Zone: " + (route["home_zone"] as str) + " | Stops: " + str(len(plan)) + " | Total cost: " + str(route["total_cost"] as int) + " pts | Total bonus: +" + str(route["total_bonus"] as int) + " pts | Projected balance: " + str(route["remaining"] as int) + " pts"}
-                    </CardDescription>
-                </CardHeader>
-                <CardContent>
-                    {len(plan) == 0 and
-                        <p className="text-muted-foreground text-sm py-4 text-center">No affordable stops found for this neighbor.</p>
-                    }
-                    {len(plan) > 0 and
-                        <Table>
-                            <TableHeader>
-                                <TableRow>
-                                    <TableHead>Stop</TableHead>
-                                    <TableHead>Type</TableHead>
-                                    <TableHead>Zone</TableHead>
-                                    <TableHead className="text-right">Cost</TableHead>
-                                    <TableHead className="text-right">Bonus</TableHead>
-                                    <TableHead className="text-right">Action</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {for p in plan {
-                                    p_stop = p["stop"] as str;
-                                    p_type = p["stop_type"] as str;
-                                    p_zone = p["zone"] as str;
-                                    p_cost = p["cost"] as int;
-                                    p_bonus = p["bonus"] as int;
-                                    is_executing = executing == p_stop;
-                                    <TableRow key={p_stop}>
-                                        <TableCell className="font-medium">{p_stop}</TableCell>
-                                        <TableCell>
-                                            <Badge variant="outline" className="capitalize text-xs">{p_type}</Badge>
-                                        </TableCell>
-                                        <TableCell className="text-muted-foreground text-sm capitalize">{p_zone}</TableCell>
-                                        <TableCell className="text-right text-rose-500 font-medium">{str(p_cost)} pts</TableCell>
-                                        <TableCell className="text-right text-emerald-600 font-medium">
-                                            {("+" if p_bonus > 0 else "") + str(p_bonus) + " pts"}
-                                        </TableCell>
-                                        <TableCell className="text-right">
-                                            <Button
-                                                size="sm"
-                                                variant="outline"
-                                                disabled={is_executing or executing != ""}
-                                                onClick={lambda { handle_execute(p_stop); }}
-                                            >
-                                                {is_executing and <Spinner className="size-3 mr-1" /> or <span></span>}
-                                                {is_executing and "Going..." or "Go"}
-                                            </Button>
-                                        </TableCell>
-                                    </TableRow>
-                                }}
-                            </TableBody>
-                        </Table>
-                    }
-                </CardContent>
-            </Card>
+            <div className="rounded-[10px] overflow-hidden" style={{"backgroundColor": "#ffffff", "boxShadow": "inset 0 0 0 1px #f2f0ed"}}>
+                <div className="px-6 py-4" style={{"borderBottom": "1px solid #f2f0ed"}}>
+                    <p className="text-[15px] font-semibold" style={{"color": "#343433"}}>Route Plan for {route["neighbor"] as str}</p>
+                    <p className="text-[13px] mt-0.5" style={{"color": "#7e7e7d"}}>
+                        {"Balance: " + str(route["balance"] as int) + " pts  ·  Zone: " + (route["home_zone"] as str) + "  ·  " + str(len(plan)) + " stops  ·  Cost: " + str(route["total_cost"] as int) + " pts  ·  Bonus: +" + str(route["total_bonus"] as int) + " pts  ·  Projected: " + str(route["remaining"] as int) + " pts"}
+                    </p>
+                </div>
+                {len(plan) == 0 and
+                    <p className="px-6 py-8 text-[14px] text-center" style={{"color": "#7e7e7d"}}>No affordable stops found for this neighbor.</p>
+                }
+                {len(plan) > 0 and
+                    <table className="w-full">
+                        <thead>
+                            <tr style={{"borderBottom": "1px solid #f2f0ed"}}>
+                                <th className="text-left px-6 py-3 text-[12px] font-medium" style={{"color": "#7e7e7d"}}>Stop</th>
+                                <th className="text-left px-4 py-3 text-[12px] font-medium" style={{"color": "#7e7e7d"}}>Type</th>
+                                <th className="text-left px-4 py-3 text-[12px] font-medium" style={{"color": "#7e7e7d"}}>Zone</th>
+                                <th className="text-right px-4 py-3 text-[12px] font-medium" style={{"color": "#7e7e7d"}}>Cost</th>
+                                <th className="text-right px-4 py-3 text-[12px] font-medium" style={{"color": "#7e7e7d"}}>Bonus</th>
+                                <th className="text-right px-6 py-3 text-[12px] font-medium" style={{"color": "#7e7e7d"}}>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {for p in plan {
+                                p_stop = p["stop"] as str;
+                                p_type = p["stop_type"] as str;
+                                p_zone = p["zone"] as str;
+                                p_cost = p["cost"] as int;
+                                p_bonus = p["bonus"] as int;
+                                is_executing = executing == p_stop;
+                                <tr key={p_stop} style={{"borderBottom": "1px solid #f2f0ed"}}>
+                                    <td className="px-6 py-3.5 text-[14px] font-medium" style={{"color": "#343433"}}>{p_stop}</td>
+                                    <td className="px-4 py-3.5">
+                                        <span className="inline-block px-2 py-0.5 rounded-[6px] text-[11px] font-medium capitalize" style={{"backgroundColor": "#f2f0ed", "color": "#474645"}}>{p_type}</span>
+                                    </td>
+                                    <td className="px-4 py-3.5 text-[13px] capitalize" style={{"color": "#7e7e7d"}}>{p_zone}</td>
+                                    <td className="px-4 py-3.5 text-right text-[13px] font-medium" style={{"color": "#ff3e00"}}>{str(p_cost)} pts</td>
+                                    <td className="px-4 py-3.5 text-right text-[13px] font-medium" style={{"color": "#00c978"}}>
+                                        {("+" if p_bonus > 0 else "") + str(p_bonus) + " pts"}
+                                    </td>
+                                    <td className="px-6 py-3.5 text-right">
+                                        <button
+                                            disabled={is_executing or executing != ""}
+                                            onClick={lambda { handle_execute(p_stop); }}
+                                            className="flex items-center gap-1.5 px-4 py-1.5 text-[12px] font-semibold ml-auto transition-opacity disabled:opacity-40"
+                                            style={{"backgroundColor": "#121212", "color": "#fbfaf9", "borderRadius": "9999px", "border": "none", "cursor": "pointer"}}
+                                        >
+                                            {is_executing and <Spinner className="size-3" /> or <span></span>}
+                                            {is_executing and "Going..." or "Go"}
+                                        </button>
+                                    </td>
+                                </tr>
+                            }}
+                        </tbody>
+                    </table>
+                }
+            </div>
         }
     </div>;
 }
