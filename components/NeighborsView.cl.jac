@@ -24,6 +24,8 @@ def:pub NeighborsView() -> JsxElement {
     has adding: bool = False;
     has form_error: str = "";
     has deleting_id: str = "";
+    has wellbeing_person: str = "";
+    has wellbeing_history: list[dict] = [];
 
     async can with entry {
         try {
@@ -100,6 +102,35 @@ def:pub NeighborsView() -> JsxElement {
             error = str(ex);
         }
         deleting_id = "";
+    }
+
+    def open_wellbeing(person_name: str, history: list[dict]) {
+        wellbeing_person = person_name;
+        wellbeing_history = history;
+    }
+
+    def close_wellbeing(_e: MouseEvent) {
+        wellbeing_person = "";
+        wellbeing_history = [];
+    }
+
+    def feeling_class(feeling: str) -> str {
+        if feeling == "Great" {
+            return "bg-emerald-100 text-emerald-800";
+        }
+        elif feeling == "Good" {
+            return "bg-lime-100 text-lime-800";
+        }
+        elif feeling == "Okay" {
+            return "bg-amber-100 text-amber-800";
+        }
+        elif feeling == "Struggling" {
+            return "bg-orange-100 text-orange-800";
+        }
+        elif feeling == "Distressed" {
+            return "bg-rose-100 text-rose-800";
+        }
+        return "bg-muted text-muted-foreground";
     }
 
     visible_neighbors: list[dict] = [];
@@ -231,6 +262,7 @@ def:pub NeighborsView() -> JsxElement {
                             <TableHead className="h-12 px-4">
                                 <span className="inline-flex items-center gap-1.5">Net Gained <HugeiconsIcon icon={UnfoldMoreIcon} strokeWidth={2} className="size-3.5 text-muted-foreground" /></span>
                             </TableHead>
+                            <TableHead className="h-12 px-4">Wellbeing</TableHead>
                             <TableHead className="h-12 px-4 text-center">Actions</TableHead>
                         </TableRow>
                     </TableHeader>
@@ -238,6 +270,7 @@ def:pub NeighborsView() -> JsxElement {
                         {loading and
                             <TableRow>
                                 <TableCell className="h-16 px-4"><Skeleton className="h-4 w-24" /></TableCell>
+                                <TableCell className="h-16 px-4"><Skeleton className="h-4 w-20" /></TableCell>
                                 <TableCell className="h-16 px-4"><Skeleton className="h-4 w-20" /></TableCell>
                                 <TableCell className="h-16 px-4"><Skeleton className="h-4 w-20" /></TableCell>
                                 <TableCell className="h-16 px-4"><Skeleton className="h-4 w-20" /></TableCell>
@@ -269,6 +302,11 @@ def:pub NeighborsView() -> JsxElement {
                             }
                             net_gained = earned - spent;
                             net_class = "px-4 font-medium " + ("text-emerald-600" if net_gained >= 0 else "text-rose-600");
+                            history = n["wellbeing_history"] as list[dict];
+                            latest_feeling = "No sessions";
+                            if len(history) > 0 {
+                                latest_feeling = history[len(history) - 1]["feeling"] as str;
+                            }
                             <TableRow key={id_str} className="h-16">
                                 <TableCell className="px-4">
                                     <div className="w-44">
@@ -292,6 +330,16 @@ def:pub NeighborsView() -> JsxElement {
                                 <TableCell className="px-4">{str(spent)}</TableCell>
                                 <TableCell className={net_class}>{("+" if net_gained > 0 else "") + str(net_gained)}</TableCell>
                                 <TableCell className="px-4">
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={lambda { open_wellbeing(name_str, history); }}
+                                        title={"View " + name_str + "'s wellbeing history"}
+                                    >
+                                        {latest_feeling + " · " + str(len(history))}
+                                    </Button>
+                                </TableCell>
+                                <TableCell className="px-4">
                                     <div className="flex items-center justify-center gap-1">
                                         <Button variant="ghost" size="icon-sm" title={"Edit " + name_str + " name or home zone"}>
                                             <HugeiconsIcon icon={PencilEdit01Icon} strokeWidth={2} className="size-4" />
@@ -312,7 +360,7 @@ def:pub NeighborsView() -> JsxElement {
                         }}
                         {not loading and len(visible_neighbors) == 0 and
                             <TableRow>
-                                <TableCell colSpan={8} className="h-32 text-center text-muted-foreground">
+                                <TableCell colSpan={9} className="h-32 text-center text-muted-foreground">
                                     No people match this search and zone.
                                 </TableCell>
                             </TableRow>
@@ -362,6 +410,48 @@ def:pub NeighborsView() -> JsxElement {
                             <Button type="submit" disabled={adding}>{("Adding..." if adding else "Add Person")}</Button>
                         </div>
                     </form>
+                </div>
+            </div>
+        }
+
+        {wellbeing_person != "" and
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/35 p-4">
+                <div className="w-full max-w-2xl rounded-xl border border-border bg-background p-6 shadow-xl">
+                    <div className="flex items-start justify-between gap-4 mb-5">
+                        <div>
+                            <h2 className="text-xl font-semibold">{wellbeing_person + " — Wellbeing"}</h2>
+                            <p className="text-sm text-muted-foreground mt-1">Session history, point impact, and recorded feelings.</p>
+                        </div>
+                        <Button variant="ghost" size="sm" onClick={close_wellbeing}>Close</Button>
+                    </div>
+                    {len(wellbeing_history) == 0 and
+                        <div className="rounded-lg bg-muted/50 py-10 text-center text-sm text-muted-foreground">
+                            No completed sessions yet.
+                        </div>
+                    }
+                    {len(wellbeing_history) > 0 and
+                        <div className="max-h-[420px] overflow-y-auto rounded-lg border border-border">
+                            {for (session_index, session) in enumerate(wellbeing_history) {
+                                session_stop = session["stop"] as str;
+                                session_feeling = session["feeling"] as str;
+                                session_net = session["net"] as int;
+                                <div key={session["id"] as str} className="flex items-center justify-between gap-4 border-b border-border last:border-b-0 p-4">
+                                    <div>
+                                        <p className="text-sm font-medium">{session_stop}</p>
+                                        <p className="text-xs text-muted-foreground mt-1">{"Session " + str(session_index + 1)}</p>
+                                    </div>
+                                    <div className="flex items-center gap-3">
+                                        <span className={"rounded-full px-2.5 py-1 text-xs font-medium " + feeling_class(session_feeling)}>
+                                            {session_feeling}
+                                        </span>
+                                        <span className={"text-sm font-medium " + ("text-emerald-600" if session_net >= 0 else "text-rose-600")}>
+                                            {("+" if session_net > 0 else "") + str(session_net) + " pts"}
+                                        </span>
+                                    </div>
+                                </div>
+                            }}
+                        </div>
+                    }
                 </div>
             </div>
         }

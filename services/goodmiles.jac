@@ -27,6 +27,7 @@ node Trip {
     has stop_name: str;
     has cost: int;
     has bonus: int;
+    has feeling: str = "Not recorded";
 }
 
 node Seeded {
@@ -113,6 +114,19 @@ def:pub api_neighbors() -> list[dict] {
         if upskill_progress > 100 {
             upskill_progress = 100;
         }
+        wellbeing_history: list[dict] = [];
+        for t in [root-->][?:Trip] {
+            if t.neighbor_name == n.name {
+                wellbeing_history = wellbeing_history + [{
+                    "id": jid(t),
+                    "stop": t.stop_name,
+                    "cost": t.cost,
+                    "bonus": t.bonus,
+                    "net": t.bonus - t.cost,
+                    "feeling": t.feeling
+                }];
+            }
+        }
         result = result + [{
             "id": jid(n),
             "name": n.name,
@@ -120,7 +134,8 @@ def:pub api_neighbors() -> list[dict] {
             "points_earned": n.points_earned,
             "points_spent": n.points_spent,
             "home_zone": n.home_zone,
-            "upskill_progress": upskill_progress
+            "upskill_progress": upskill_progress,
+            "wellbeing_history": wellbeing_history
         }];
     }
     return result;
@@ -258,7 +273,7 @@ def:pub api_optimize(neighbor_name: str) -> dict {
     };
 }
 
-def:pub api_execute(neighbor_name: str, stop_name: str) -> dict {
+def:pub api_execute(neighbor_name: str, stop_name: str, feeling: str = "Not recorded") -> dict {
     neighbor = get_neighbor(neighbor_name);
     stop = get_stop(stop_name);
 
@@ -268,6 +283,10 @@ def:pub api_execute(neighbor_name: str, stop_name: str) -> dict {
 
     cost = stop.base_cost;
     bonus = stop.bonus_on_visit;
+    recorded_feeling = feeling;
+    if recorded_feeling not in ["Great", "Good", "Okay", "Struggling", "Distressed"] {
+        recorded_feeling = "Not recorded";
+    }
 
     if neighbor.points_balance < cost {
         return {"error": "Insufficient points", "balance": neighbor.points_balance, "cost": cost};
@@ -278,7 +297,14 @@ def:pub api_execute(neighbor_name: str, stop_name: str) -> dict {
     neighbor.points_earned = neighbor.points_earned + bonus;
 
     trip_id = neighbor.name + "-" + stop.name + "-" + str(neighbor.points_spent);
-    root ++> Trip(trip_id=trip_id, neighbor_name=neighbor.name, stop_name=stop.name, cost=cost, bonus=bonus);
+    root ++> Trip(
+        trip_id=trip_id,
+        neighbor_name=neighbor.name,
+        stop_name=stop.name,
+        cost=cost,
+        bonus=bonus,
+        feeling=recorded_feeling
+    );
 
     return {
         "status": "completed",
@@ -286,6 +312,7 @@ def:pub api_execute(neighbor_name: str, stop_name: str) -> dict {
         "stop": stop.name,
         "cost": cost,
         "bonus": bonus,
+        "feeling": recorded_feeling,
         "new_balance": neighbor.points_balance
     };
 }
@@ -298,7 +325,8 @@ def:pub api_trips() -> list[dict] {
             "neighbor": t.neighbor_name,
             "stop": t.stop_name,
             "cost": t.cost,
-            "bonus": t.bonus
+            "bonus": t.bonus,
+            "feeling": t.feeling
         }];
     }
     return result;
