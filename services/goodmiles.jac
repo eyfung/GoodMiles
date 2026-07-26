@@ -125,7 +125,7 @@ def:pub api_neighbors() -> list[dict] {
                     "bonus": t.bonus,
                     "net": t.bonus - t.cost,
                     "feeling": t.feeling,
-                    "notes": t.notes
+                    "notes": getattr(t, "notes", "")
                 }];
             }
         }
@@ -331,7 +331,7 @@ def:pub api_trips() -> list[dict] {
             "cost": t.cost,
             "bonus": t.bonus,
             "feeling": t.feeling,
-            "notes": t.notes
+            "notes": getattr(t, "notes", "")
         }];
     }
     return result;
