@@ -106,7 +106,7 @@ def:pub api_neighbors() -> list[dict] {
     initialize_starting_points();
     result: list[dict] = [];
     for n in get_all_neighbors() {
-        upskill_progress = int((n.points_balance * 100) / 150);
+        upskill_progress = n.points_balance - 50;
         if upskill_progress < 0 {
             upskill_progress = 0;
         }

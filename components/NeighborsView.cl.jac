@@ -103,10 +103,23 @@ def:pub NeighborsView() -> JsxElement {
     }
 
     visible_neighbors: list[dict] = [];
+    not_started_count = 0;
+    in_progress_count = 0;
+    completed_count = 0;
     query = search.lower();
     for n in neighbors {
         person_name = n["name"] as str;
         person_zone = n["home_zone"] as str;
+        person_balance = n["points_balance"] as int;
+        if person_balance <= 50 {
+            not_started_count = not_started_count + 1;
+        }
+        elif person_balance >= 150 {
+            completed_count = completed_count + 1;
+        }
+        else {
+            in_progress_count = in_progress_count + 1;
+        }
         matches_search = query == "" or query in person_name.lower();
         matches_zone = selected_zone == "all" or person_zone == selected_zone;
         if matches_search and matches_zone {
@@ -115,7 +128,7 @@ def:pub NeighborsView() -> JsxElement {
     }
 
     return <div className="p-6 lg:p-8 min-h-full">
-        <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between mb-7">
+        <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between mb-6">
             <div>
                 <h1 className="text-3xl font-semibold tracking-tight">People</h1>
                 <p className="text-muted-foreground text-sm mt-1.5">Everyone in the mobility program, in one place.</p>
@@ -155,6 +168,38 @@ def:pub NeighborsView() -> JsxElement {
                 </Button>
             </div>
         </div>
+
+        {not loading and error == "" and
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
+                <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-4">
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <p className="text-sm font-medium text-amber-900">Not started</p>
+                            <p className="text-xs text-amber-700 mt-1">50 points or fewer</p>
+                        </div>
+                        <span className="text-2xl font-semibold text-amber-700">{str(not_started_count)}</span>
+                    </div>
+                </div>
+                <div className="rounded-xl border border-lime-200 bg-lime-50/70 p-4">
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <p className="text-sm font-medium text-lime-900">In progress</p>
+                            <p className="text-xs text-lime-700 mt-1">51–149 points</p>
+                        </div>
+                        <span className="text-2xl font-semibold text-lime-700">{str(in_progress_count)}</span>
+                    </div>
+                </div>
+                <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-4">
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <p className="text-sm font-medium text-emerald-900">Completed</p>
+                            <p className="text-xs text-emerald-700 mt-1">150 points or more</p>
+                        </div>
+                        <span className="text-2xl font-semibold text-emerald-700">{str(completed_count)}</span>
+                    </div>
+                </div>
+            </div>
+        }
 
         {error != "" and
             <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-4 text-destructive text-sm">
@@ -210,8 +255,8 @@ def:pub NeighborsView() -> JsxElement {
                             earned = n["points_earned"] as int;
                             spent = n["points_spent"] as int;
                             progress = n["upskill_progress"] as int;
-                            progress_label = "Not started" if progress == 0 else ("Job ready" if progress == 100 else "In progress");
-                            progress_detail = str(balance) + " / 150 current points";
+                            progress_label = "Not started" if balance <= 50 else ("Completed" if balance >= 150 else "In progress");
+                            progress_detail = str(balance) + " current points";
                             progress_color = "bg-amber-300";
                             if progress >= 75 {
                                 progress_color = "bg-emerald-600";
