@@ -1,8 +1,8 @@
 # GoodMiles — Graph nodes, seed data, allocation engine, API endpoints
 
-# ========================================
+# ===========================
 # Node definitions
-# ========================================
+# ===========================
 
 node Neighbor {
     has name: str;
@@ -32,9 +32,9 @@ node Seeded {
     has done: bool = True;
 }
 
-# ========================================
-# Seed data (idempotent)
-# ========================================
+# ===========================
+# Seed data (idempotent) — called once at server boot
+# ===========================
 
 def seed_demo_data {
     existing = [root-->][?:Seeded];
@@ -55,9 +55,9 @@ def seed_demo_data {
     root ++> Neighbor(name="Riley", points_balance=150, home_zone="north");
 }
 
-# ========================================
+# ===========================
 # Helpers
-# ========================================
+# ===========================
 
 def get_all_neighbors() -> list[Neighbor] {
     return [root-->][?:Neighbor];
@@ -85,12 +85,11 @@ def get_stop(name: str) -> ServiceStop | None {
     return None;
 }
 
-# ========================================
-# Public API endpoints
-# ========================================
+# ===========================
+# Public API endpoints — pure readers (no graph writes)
+# ===========================
 
 def:pub api_neighbors() -> list[dict] {
-    seed_demo_data();
     result: list[dict] = [];
     for n in get_all_neighbors() {
         result = result + [{
@@ -106,7 +105,6 @@ def:pub api_neighbors() -> list[dict] {
 }
 
 def:pub api_stops() -> list[dict] {
-    seed_demo_data();
     result: list[dict] = [];
     for s in get_all_stops() {
         result = result + [{
@@ -122,7 +120,6 @@ def:pub api_stops() -> list[dict] {
 }
 
 def:pub api_optimize(neighbor_name: str) -> dict {
-    seed_demo_data();
     n = get_neighbor(neighbor_name);
     if n == None {
         return {"error": "Neighbor not found"};
@@ -182,7 +179,6 @@ def:pub api_optimize(neighbor_name: str) -> dict {
 }
 
 def:pub api_execute(neighbor_name: str, stop_name: str) -> dict {
-    seed_demo_data();
     neighbor = get_neighbor(neighbor_name);
     stop = get_stop(stop_name);
 
@@ -215,7 +211,6 @@ def:pub api_execute(neighbor_name: str, stop_name: str) -> dict {
 }
 
 def:pub api_trips() -> list[dict] {
-    seed_demo_data();
     result: list[dict] = [];
     for t in [root-->][?:Trip] {
         result = result + [{
@@ -227,4 +222,12 @@ def:pub api_trips() -> list[dict] {
         }];
     }
     return result;
+}
+
+# ===========================
+# Boot — seed data once when server starts
+# ===========================
+
+with entry {
+    seed_demo_data();
 }
