@@ -56,7 +56,6 @@ def:pub AppShell() -> JsxElement {
                     Optimize
                 </NavLink>
                 <NavLink to="/jobmatch" className={lambda (s: any) { return nav_cls("/jobmatch"); }}>
-                    <span className="text-base">Match</span>
                     Job Match
                 </NavLink>
             </nav>
