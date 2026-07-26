@@ -8,340 +8,326 @@ import from ".ui.textarea" { Textarea }
 import from ".ui.field" { Field, FieldLabel }
 import from ".ui.skeleton" { Skeleton }
 import from ".ui.spinner" { Spinner }
+cl import from "react-leaflet" { MapContainer, TileLayer, CircleMarker, Polyline, Popup }
 sv import from "..services.pathway" {
-    api_service_stops, api_suggest_category, api_create_participant,
-    api_build_pathway, api_grant_consent, api_replan
+    api_fleet_state, api_request_ride, api_reset_fleet
 }
 
-glob _CATEGORY_OPTIONS: list[dict] = [
-    {"value": "kitchen", "label": "Kitchen & Food Prep"},
-    {"value": "cleaning", "label": "Cleaning & Custodial"},
-    {"value": "warehouse", "label": "Warehouse & Logistics"},
-    {"value": "hospitality", "label": "Hotel & Hospitality"},
-    {"value": "retail", "label": "Retail & Grocery"},
-    {"value": "admin", "label": "Office & Reception"},
+glob _NEED_OPTIONS: list[dict] = [
+    {"value": "food", "label": "Food assistance"},
+    {"value": "coaching", "label": "Job coaching"},
+    {"value": "health", "label": "Healthcare"},
+    {"value": "counseling", "label": "Counseling"},
+    {"value": "employment", "label": "Employment services"},
 ];
 
-def category_label(value: str) -> str {
-    for opt in _CATEGORY_OPTIONS {
-        if (opt["value"] as str) == value {
-            return opt["label"] as str;
-        }
+def av_color(status: str) -> str {
+    if status == "enroute" {
+        return "#3b82f6";
     }
-    return value;
+    return "#10b981";
 }
 
-def cap(value: str) -> str {
-    if value == "" {
-        return value;
+def route_color(status: str) -> str {
+    if status == "dispatched" {
+        return "#3b82f6";
     }
-    return value.capitalize();
+    if status == "queued" {
+        return "#ef4444";
+    }
+    return "#94a3b8";
 }
 
-def step_badge(status: str) -> JsxElement {
-    if status == "completed" {
-        return <Badge className="text-xs">Completed</Badge>;
+def status_badge(status: str) -> JsxElement {
+    if status == "dispatched" {
+        return <Badge className="text-xs">Dispatched</Badge>;
     }
-    if status == "awaiting_consent" {
-        return <Badge variant="outline" className="text-xs">Awaiting consent</Badge>;
+    if status == "self_transport" {
+        return <Badge variant="secondary" className="text-xs">Self-transport</Badge>;
     }
-    if status == "blocked" {
-        return <Badge variant="destructive" className="text-xs">Blocked</Badge>;
+    if status == "queued" {
+        return <Badge variant="destructive" className="text-xs">Queued</Badge>;
     }
-    if status == "failed" {
-        return <Badge variant="destructive" className="text-xs">Failed</Badge>;
-    }
-    return <Badge variant="secondary" className="text-xs">Pending</Badge>;
+    return <Badge variant="outline" className="text-xs">{status}</Badge>;
 }
 
 def:pub PathwayView() -> JsxElement {
-    has stops: list[dict] = [];
-    has loading_stops: bool = True;
-    has selected_stop: str = "";
+    has pickups: list[dict] = [];
+    has destinations: list[dict] = [];
+    has fleet: list[dict] = [];
+    has requests: list[dict] = [];
+    has capacity: dict = {};
+    has loading: bool = True;
 
-    has seeker_name: str = "";
-    has notes: str = "";
-    has availability: str = "morning";
-    has car_val: str = "no";
-    has resume_val: str = "no";
-    has income_val: str = "yes";
+    has name: str = "";
+    has note: str = "";
+    has availability: str = "now";
+    has has_car: str = "no";
+    has need: str = "food";
+    has pickup_name: str = "";
+    has dest_id: str = "";
 
-    has suggesting: bool = False;
-    has has_suggestion: bool = False;
-    has category_source: str = "";
-    has confirmed_category: str = "";
-
-    has building: bool = False;
-    has acting: bool = False;
-    has pathway: dict = {};
-    has has_pathway: bool = False;
-
+    has requesting: bool = False;
+    has current: dict = {};
+    has has_current: bool = False;
     has error: str = "";
 
     async can with entry {
         try {
-            data: any = await api_service_stops();
-            stops = data as list[dict];
+            data: any = await api_fleet_state();
+            st = data as dict;
+            fleet = st["fleet"] as list[dict];
+            requests = st["requests"] as list[dict];
+            capacity = st["capacity"] as dict;
+            pickups = st["pickups"] as list[dict];
+            destinations = st["destinations"] as list[dict];
         } except Exception as e {
             error = str(e);
         }
-        loading_stops = False;
+        loading = False;
     }
 
     def handle_name_change(e: ChangeEvent) {
-        seeker_name = e.target.value;
+        name = e.target.value;
     }
 
-    def handle_notes_change(e: ChangeEvent) {
-        notes = e.target.value;
-        has_suggestion = False;
-        has_pathway = False;
+    def handle_note_change(e: ChangeEvent) {
+        note = e.target.value;
     }
 
-    async def handle_suggest() -> None {
-        if notes == "" {
+    def _apply_state(st: dict) {
+        fleet = st["fleet"] as list[dict];
+        requests = st["requests"] as list[dict];
+        capacity = st["capacity"] as dict;
+        pickups = st["pickups"] as list[dict];
+        destinations = st["destinations"] as list[dict];
+    }
+
+    async def handle_request() -> None {
+        if name == "" or pickup_name == "" or dest_id == "" {
             return;
         }
-        suggesting = True;
+        requesting = True;
         error = "";
-        try {
-            data: any = await api_suggest_category(notes);
-            res = data as dict;
-            confirmed_category = res["category"] as str;
-            category_source = res["source"] as str;
-            has_suggestion = True;
-        } except Exception as e {
-            error = str(e);
+        plat = 0.0;
+        plng = 0.0;
+        for pp in pickups {
+            if (pp["name"] as str) == pickup_name {
+                plat = pp["lat"] as float;
+                plng = pp["lng"] as float;
+            }
         }
-        suggesting = False;
-    }
-
-    async def handle_build() -> None {
-        if seeker_name == "" or selected_stop == "" or confirmed_category == "" {
-            return;
-        }
-        building = True;
-        error = "";
-        has_pathway = False;
         try {
-            created: any = await api_create_participant(
-                seeker_name, notes, confirmed_category, selected_stop,
-                availability, car_val == "yes", resume_val == "yes", income_val == "yes"
-            );
-            pdata = created as dict;
-            if "error" in pdata {
-                error = pdata["error"] as str;
+            data: any = await api_request_ride(name, note, availability, has_car == "yes", need, pickup_name, plat, plng, dest_id);
+            st = data as dict;
+            if "error" in st {
+                error = st["error"] as str;
             } else {
-                pid = pdata["id"] as str;
-                built: any = await api_build_pathway(pid);
-                pw = built as dict;
-                if "error" in pw {
-                    error = pw["error"] as str;
-                } else {
-                    pathway = pw;
-                    has_pathway = True;
-                }
+                _apply_state(st);
+                current = st["current"] as dict;
+                has_current = True;
             }
         } except Exception as e {
             error = str(e);
         }
-        building = False;
+        requesting = False;
     }
 
-    async def handle_consent() -> None {
-        if not has_pathway {
-            return;
-        }
-        acting = True;
+    async def handle_reset() -> None {
+        requesting = True;
         error = "";
         try {
-            pid = pathway["pathway_id"] as str;
-            updated: any = await api_grant_consent(pid);
-            pathway = updated as dict;
+            data: any = await api_reset_fleet();
+            st = data as dict;
+            _apply_state(st);
+            has_current = False;
+            current = {};
         } except Exception as e {
             error = str(e);
         }
-        acting = False;
+        requesting = False;
     }
 
-    async def handle_replan() -> None {
-        if not has_pathway {
-            return;
-        }
-        acting = True;
-        error = "";
-        try {
-            pid = pathway["pathway_id"] as str;
-            updated: any = await api_replan(pid);
-            pathway = updated as dict;
-        } except Exception as e {
-            error = str(e);
-        }
-        acting = False;
-    }
-
-    if loading_stops {
+    if loading {
         return <div className="p-6">
             <div className="mb-6">
                 <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">On-Demand AV as a Social Service</p>
                 <h1 className="text-2xl font-semibold tracking-tight mt-1">Pathway</h1>
-                <p className="text-muted-foreground text-sm mt-1">Coordinating a participant's full route from intake to a real job</p>
+                <p className="text-muted-foreground text-sm mt-1">Dispatching the autonomous fleet to social-service appointments</p>
             </div>
-            <Skeleton className="h-10 w-64" />
+            <Skeleton className="h-96 w-full" />
         </div>;
     }
 
-    can_suggest = notes != "" and not suggesting;
-    can_build = seeker_name != "" and selected_stop != "" and confirmed_category != "" and not building;
-
-    pw_status: str = "";
-    sel: dict = {};
-    counts: dict = {};
-    consent_needed: int = 0;
-    if has_pathway {
-        pw_status = pathway["status"] as str;
-        sel = pathway["selected"] as dict;
-        counts = pathway["counts"] as dict;
-        consent_needed = counts["awaiting_consent"] as int;
-    }
-    has_selected = has_pathway and ("title" in sel);
-    sel_dist: float = 0.0;
-    if has_selected {
-        sel_dist = sel["distance_miles"] as float;
+    can_request = name != "" and pickup_name != "" and dest_id != "" and not requesting;
+    cap_total = (capacity["total"] as int) if "total" in capacity else 0;
+    cap_used = (capacity["used"] as int) if "used" in capacity else 0;
+    cap_free = (capacity["free"] as int) if "free" in capacity else 0;
+    rec: dict = {};
+    if has_current and ("next_service" in current) {
+        rec = current["next_service"] as dict;
     }
 
     return <div className="p-6 flex flex-col gap-6">
-        <div>
-            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">On-Demand AV as a Social Service</p>
-            <h1 className="text-2xl font-semibold tracking-tight mt-1">Pathway</h1>
-            <p className="text-muted-foreground text-sm mt-1 max-w-3xl">
-                The agent builds, executes, and continuously re-plans each participant's route to work —
-                matching feasible jobs, rejecting the ones that aren't, clearing barriers with community
-                resources, and holding for human consent. It coordinates; it doesn't just recommend.
-            </p>
+        <div className="flex items-end justify-between gap-4 flex-wrap">
+            <div>
+                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">On-Demand AV as a Social Service</p>
+                <h1 className="text-2xl font-semibold tracking-tight mt-1">Pathway</h1>
+                <p className="text-muted-foreground text-sm mt-1 max-w-3xl">
+                    A participant requests a ride to a booked service. The agent dispatches an AV by
+                    live fleet capacity and proximity, plans the route, maps every trip, and recommends
+                    the best next ride.
+                </p>
+            </div>
+            <div className="flex items-center gap-2">
+                <Badge variant="secondary" className="text-xs">{str(cap_free) + " / " + str(cap_total) + " seats free"}</Badge>
+                <Button variant="outline" onClick={lambda { handle_reset(); }} disabled={requesting}>Reset fleet</Button>
+            </div>
         </div>
 
-        <Card>
-            <CardHeader>
-                <CardTitle>Participant Intake</CardTitle>
-                <CardDescription>A caseworker fills this in at their community center with the participant present.</CardDescription>
-            </CardHeader>
-            <CardContent className="flex flex-col gap-4">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <Card className="lg:col-span-1">
+                <CardHeader>
+                    <CardTitle>Ride request</CardTitle>
+                    <CardDescription>Participant intake at the community center.</CardDescription>
+                </CardHeader>
+                <CardContent className="flex flex-col gap-4">
                     <Field>
-                        <FieldLabel htmlFor="seeker-name">Name</FieldLabel>
-                        <Input id="seeker-name" value={seeker_name} onChange={handle_name_change} placeholder="e.g. Maya" />
+                        <FieldLabel htmlFor="name">Name</FieldLabel>
+                        <Input id="name" value={name} onChange={handle_name_change} placeholder="e.g. Maya" />
                     </Field>
                     <Field>
-                        <FieldLabel htmlFor="center-select">Community Center</FieldLabel>
-                        <Select onValueChange={lambda (v: str) { selected_stop = v; }}>
-                            <SelectTrigger id="center-select">
-                                <SelectValue placeholder="Where is the participant now?" />
-                            </SelectTrigger>
+                        <FieldLabel htmlFor="pickup">Where are you now? (pickup)</FieldLabel>
+                        <Select value={pickup_name} onValueChange={lambda (v: str) { pickup_name = v; }}>
+                            <SelectTrigger id="pickup"><SelectValue placeholder="Current location..." /></SelectTrigger>
                             <SelectContent>
                                 <SelectGroup>
-                                    {for s in stops {
-                                        s_id = s["id"] as str;
-                                        s_name = s["name"] as str;
-                                        s_zone = s["zone"] as str;
-                                        s_type = s["stop_type"] as str;
-                                        <SelectItem key={s_id} value={s_id}>
-                                            {s_name + " — " + cap(s_type) + " · " + cap(s_zone)}
-                                        </SelectItem>
+                                    {for pp in pickups {
+                                        pp_name = pp["name"] as str;
+                                        pp_zone = pp["zone"] as str;
+                                        <SelectItem key={pp_name} value={pp_name}>{pp_name}</SelectItem>
                                     }}
                                 </SelectGroup>
                             </SelectContent>
                         </Select>
                     </Field>
-                </div>
-
-                <Field>
-                    <FieldLabel htmlFor="notes">Experience notes</FieldLabel>
-                    <Textarea
-                        id="notes"
-                        value={notes}
-                        onChange={handle_notes_change}
-                        placeholder="e.g. Restaurant and cleaning experience, mornings only, no car, needs income soon"
-                    />
-                </Field>
-
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                     <Field>
-                        <FieldLabel htmlFor="availability">Availability</FieldLabel>
-                        <Select value={availability} onValueChange={lambda (v: str) { availability = v; }}>
-                            <SelectTrigger id="availability"><SelectValue /></SelectTrigger>
+                        <FieldLabel htmlFor="dest">Where are you going? (service)</FieldLabel>
+                        <Select value={dest_id} onValueChange={lambda (v: str) { dest_id = v; }}>
+                            <SelectTrigger id="dest"><SelectValue placeholder="Booked service..." /></SelectTrigger>
                             <SelectContent>
-                                <SelectItem value="morning">Morning</SelectItem>
-                                <SelectItem value="afternoon">Afternoon</SelectItem>
-                                <SelectItem value="evening">Evening</SelectItem>
-                                <SelectItem value="any">Any time</SelectItem>
+                                <SelectGroup>
+                                    {for d in destinations {
+                                        d_id = d["id"] as str;
+                                        d_service = d["service"] as str;
+                                        d_name = d["name"] as str;
+                                        <SelectItem key={d_id} value={d_id}>{d_service + " — " + d_name}</SelectItem>
+                                    }}
+                                </SelectGroup>
                             </SelectContent>
                         </Select>
                     </Field>
                     <Field>
-                        <FieldLabel htmlFor="car">Has a car?</FieldLabel>
-                        <Select value={car_val} onValueChange={lambda (v: str) { car_val = v; }}>
-                            <SelectTrigger id="car"><SelectValue /></SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="no">No</SelectItem>
-                                <SelectItem value="yes">Yes</SelectItem>
-                            </SelectContent>
-                        </Select>
+                        <FieldLabel htmlFor="note">Experience feedback (note)</FieldLabel>
+                        <Textarea id="note" value={note} onChange={handle_note_change} placeholder="e.g. Needs a wheelchair-accessible vehicle, mornings only" />
                     </Field>
-                    <Field>
-                        <FieldLabel htmlFor="resume">Has a résumé?</FieldLabel>
-                        <Select value={resume_val} onValueChange={lambda (v: str) { resume_val = v; }}>
-                            <SelectTrigger id="resume"><SelectValue /></SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="no">No</SelectItem>
-                                <SelectItem value="yes">Yes</SelectItem>
-                            </SelectContent>
-                        </Select>
-                    </Field>
-                    <Field>
-                        <FieldLabel htmlFor="income">Needs income soon?</FieldLabel>
-                        <Select value={income_val} onValueChange={lambda (v: str) { income_val = v; }}>
-                            <SelectTrigger id="income"><SelectValue /></SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="yes">Yes</SelectItem>
-                                <SelectItem value="no">No</SelectItem>
-                            </SelectContent>
-                        </Select>
-                    </Field>
-                </div>
-
-                <div className="flex flex-wrap items-center gap-3">
-                    <Button variant="outline" onClick={lambda { handle_suggest(); }} disabled={not can_suggest}>
-                        {suggesting and <Spinner className="size-4 mr-2" /> or <span></span>}
-                        {suggesting and "Thinking..." or "Suggest Category"}
-                    </Button>
-                    {has_suggestion and
-                        <div className="flex items-center gap-2">
-                            <Select value={confirmed_category} onValueChange={lambda (v: str) { confirmed_category = v; }}>
-                                <SelectTrigger className="w-64"><SelectValue placeholder="Confirm category..." /></SelectTrigger>
+                    <div className="grid grid-cols-2 gap-4">
+                        <Field>
+                            <FieldLabel htmlFor="avail">Availability</FieldLabel>
+                            <Select value={availability} onValueChange={lambda (v: str) { availability = v; }}>
+                                <SelectTrigger id="avail"><SelectValue /></SelectTrigger>
                                 <SelectContent>
-                                    <SelectGroup>
-                                        {for opt in _CATEGORY_OPTIONS {
-                                            o_val = opt["value"] as str;
-                                            o_label = opt["label"] as str;
-                                            <SelectItem key={o_val} value={o_val}>{o_label}</SelectItem>
-                                        }}
-                                    </SelectGroup>
+                                    <SelectItem value="now">Now</SelectItem>
+                                    <SelectItem value="morning">Morning</SelectItem>
+                                    <SelectItem value="afternoon">Afternoon</SelectItem>
                                 </SelectContent>
                             </Select>
-                            <Badge variant="outline" className="text-xs capitalize">{category_source}</Badge>
-                        </div>
-                    }
-                </div>
-
-                <div>
-                    <Button onClick={lambda { handle_build(); }} disabled={not can_build}>
-                        {building and <Spinner className="size-4 mr-2" /> or <span></span>}
-                        {building and "Building pathway..." or "Build Pathway"}
+                        </Field>
+                        <Field>
+                            <FieldLabel htmlFor="car">Has a car?</FieldLabel>
+                            <Select value={has_car} onValueChange={lambda (v: str) { has_car = v; }}>
+                                <SelectTrigger id="car"><SelectValue /></SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="no">No</SelectItem>
+                                    <SelectItem value="yes">Yes</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </Field>
+                    </div>
+                    <Field>
+                        <FieldLabel htmlFor="need">What do you need next?</FieldLabel>
+                        <Select value={need} onValueChange={lambda (v: str) { need = v; }}>
+                            <SelectTrigger id="need"><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                                <SelectGroup>
+                                    {for n in _NEED_OPTIONS {
+                                        n_val = n["value"] as str;
+                                        n_label = n["label"] as str;
+                                        <SelectItem key={n_val} value={n_val}>{n_label}</SelectItem>
+                                    }}
+                                </SelectGroup>
+                            </SelectContent>
+                        </Select>
+                    </Field>
+                    <Button onClick={lambda { handle_request(); }} disabled={not can_request}>
+                        {requesting and <Spinner className="size-4 mr-2" /> or <span></span>}
+                        {requesting and "Dispatching..." or "Request ride & dispatch"}
                     </Button>
-                </div>
-            </CardContent>
-        </Card>
+                </CardContent>
+            </Card>
+
+            <Card className="lg:col-span-2 overflow-hidden">
+                <CardHeader>
+                    <CardTitle>Fleet map</CardTitle>
+                    <CardDescription>AVs (green idle / blue en-route), pickups (grey), services (amber), and every planned route.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <div className="h-[440px] w-full rounded-lg overflow-hidden border border-border">
+                        <MapContainer center={[37.762, -122.42]} zoom={12} style={{"height": "100%", "width": "100%"}} scrollWheelZoom={False}>
+                            <TileLayer
+                                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                                attribution="&copy; OpenStreetMap contributors"
+                            />
+                            {for r in requests {
+                                r_id = r["id"] as str;
+                                r_route = r["route"] as list;
+                                r_status = r["status"] as str;
+                                <Polyline key={"route-" + r_id} positions={r_route} pathOptions={{"color": route_color(r_status), "weight": 4, "opacity": 0.7}} />
+                            }}
+                            {for d in destinations {
+                                d_id = d["id"] as str;
+                                d_lat = d["lat"] as float;
+                                d_lng = d["lng"] as float;
+                                d_service = d["service"] as str;
+                                d_name = d["name"] as str;
+                                <CircleMarker key={"dest-" + d_id} center={[d_lat, d_lng]} radius={8} pathOptions={{"color": "#f59e0b", "fillColor": "#f59e0b", "fillOpacity": 0.85}}>
+                                    <Popup>{d_service + " — " + d_name}</Popup>
+                                </CircleMarker>
+                            }}
+                            {for pp in pickups {
+                                pp_name = pp["name"] as str;
+                                pp_lat = pp["lat"] as float;
+                                pp_lng = pp["lng"] as float;
+                                <CircleMarker key={"pick-" + pp_name} center={[pp_lat, pp_lng]} radius={6} pathOptions={{"color": "#64748b", "fillColor": "#94a3b8", "fillOpacity": 0.8}}>
+                                    <Popup>{"Pickup — " + pp_name}</Popup>
+                                </CircleMarker>
+                            }}
+                            {for v in fleet {
+                                v_name = v["name"] as str;
+                                v_lat = v["lat"] as float;
+                                v_lng = v["lng"] as float;
+                                v_status = v["status"] as str;
+                                v_free = v["seats_free"] as int;
+                                v_total = v["seats_total"] as int;
+                                <CircleMarker key={"av-" + v_name} center={[v_lat, v_lng]} radius={10} pathOptions={{"color": av_color(v_status), "fillColor": av_color(v_status), "fillOpacity": 0.9}}>
+                                    <Popup>{v_name + " · " + str(v_free) + "/" + str(v_total) + " seats free · " + v_status}</Popup>
+                                </CircleMarker>
+                            }}
+                        </MapContainer>
+                    </div>
+                </CardContent>
+            </Card>
+        </div>
 
         {error != "" and
             <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-4 text-destructive text-sm">
@@ -349,215 +335,110 @@ def:pub PathwayView() -> JsxElement {
             </div>
         }
 
-        {has_pathway and
-            <Card className={pw_status == "escalated" and "border-destructive/50" or "border-primary/40"}>
-                <CardHeader>
-                    <div className="flex items-start justify-between gap-4">
-                        <div>
-                            <CardTitle>Employment goal</CardTitle>
-                            <CardDescription>{pathway["goal"] as str}</CardDescription>
+        {has_current and
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <Card className="border-primary/40">
+                    <CardHeader>
+                        <div className="flex items-center justify-between gap-4">
+                            <CardTitle>Dispatch for {current["participant"] as str}</CardTitle>
+                            {status_badge(current["status"] as str)}
                         </div>
-                        {pw_status == "escalated" and <Badge variant="destructive">Needs caseworker</Badge> or <Badge>Active pathway</Badge>}
-                    </div>
-                </CardHeader>
-                <CardContent className="flex flex-col gap-4">
-                    {has_selected and
-                        <div className="rounded-lg border border-border bg-muted/30 p-4 flex flex-col gap-2">
-                            <div className="flex items-start justify-between gap-4">
-                                <div>
-                                    <p className="text-lg font-semibold">{sel["title"] as str}</p>
-                                    <p className="text-muted-foreground text-sm">{sel["employer_name"] as str}</p>
-                                </div>
-                                <Badge>Recommended</Badge>
-                            </div>
-                            <p className="text-sm text-muted-foreground">✓ {pathway["feasibility_reason"] as str}</p>
-                            <div className="flex flex-wrap items-center gap-2">
-                                <Badge variant="outline" className="text-xs">{category_label(sel["category"] as str)}</Badge>
-                                <Badge variant="secondary" className="text-xs">{sel["shift_label"] as str}</Badge>
-                                <Badge variant="secondary" className="text-xs">{f"{sel_dist:.1f} mi away"}</Badge>
-                                <Badge variant="secondary" className="text-xs">{str(sel["open_spots"] as int) + " open spots"}</Badge>
-                                {(sel["wage_hint"] as str) != "" and <Badge variant="secondary" className="text-xs">{sel["wage_hint"] as str}</Badge>}
-                            </div>
-                            <p className="text-muted-foreground text-xs">📍 {sel["address"] as str}</p>
+                        <CardDescription>{current["decision"] as str}</CardDescription>
+                    </CardHeader>
+                    <CardContent className="flex flex-col gap-2">
+                        <p className="text-sm">
+                            <span className="text-muted-foreground">Trip: </span>
+                            {(current["pickup_name"] as str) + "  →  " + (current["dest_service"] as str) + " (" + (current["dest_name"] as str) + ")"}
+                        </p>
+                        <div className="flex flex-wrap items-center gap-2">
+                            {(current["av_name"] as str) != "" and <Badge className="text-xs">{current["av_name"] as str}</Badge>}
+                            <Badge variant="secondary" className="text-xs">{f"{current['distance_miles'] as float:.1f} mi"}</Badge>
+                            <Badge variant="secondary" className="text-xs">{str(current["eta_min"] as int) + " min ETA"}</Badge>
                         </div>
-                    }
+                    </CardContent>
+                </Card>
 
-                    <div className="flex flex-wrap items-center gap-3">
-                        {consent_needed > 0 and
-                            <Button onClick={lambda { handle_consent(); }} disabled={acting}>
-                                {acting and <Spinner className="size-4 mr-2" /> or <span></span>}
-                                Approve & submit application
-                            </Button>
-                        }
-                        {has_selected and
-                            <Button variant="outline" onClick={lambda { handle_replan(); }} disabled={acting}>
-                                {acting and <Spinner className="size-4 mr-2" /> or <span></span>}
-                                Simulate: selected job fills → replan
-                            </Button>
-                        }
-                    </div>
-                </CardContent>
-            </Card>
+                {len(rec) > 0 and
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Recommended next ride</CardTitle>
+                            <CardDescription>Based on what {current["participant"] as str} needs next.</CardDescription>
+                        </CardHeader>
+                        <CardContent className="flex flex-col gap-2">
+                            <p className="text-lg font-semibold">{(rec["service"] as str) + " — " + (rec["name"] as str)}</p>
+                            <p className="text-sm text-muted-foreground">{rec["reason"] as str}</p>
+                            <Badge variant="secondary" className="text-xs w-fit">{f"{rec['distance_miles'] as float:.1f} mi from destination"}</Badge>
+                        </CardContent>
+                    </Card>
+                }
+            </div>
         }
 
-        {has_pathway and len(pathway["barriers"] as list) > 0 and
-            <Card>
-                <CardHeader>
-                    <CardTitle>Barriers & matched resources</CardTitle>
-                    <CardDescription>What's blocking the participant, and the community resource that resolves each.</CardDescription>
-                </CardHeader>
-                <CardContent className="flex flex-col gap-2">
-                    {for b in (pathway["barriers"] as list) {
-                        b_label = b["label"] as str;
-                        b_resolved = b["resolved"] as bool;
-                        b_res = b["resource"] as dict;
-                        r_name = (b_res["name"] as str) if "name" in b_res else "No resource found";
-                        r_prov = (b_res["provider"] as str) if "provider" in b_res else "";
-                        r_line = r_name;
-                        if r_prov != "" {
-                            r_line = r_name + " · " + r_prov;
-                        }
-                        <div key={b_label} className="flex items-center justify-between gap-4 rounded-lg border border-border p-3">
-                            <div className="flex items-center gap-2">
-                                {b_resolved and <Badge className="text-xs">Resolved</Badge> or <Badge variant="destructive" className="text-xs">Blocked</Badge>}
-                                <span className="text-sm font-medium">{b_label}</span>
+        <Card>
+            <CardHeader>
+                <CardTitle>Fleet status</CardTitle>
+                <CardDescription>{str(cap_used) + " of " + str(cap_total) + " seats in use across " + str(len(fleet)) + " vehicles."}</CardDescription>
+            </CardHeader>
+            <CardContent>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    {for v in fleet {
+                        v_name = v["name"] as str;
+                        v_status = v["status"] as str;
+                        v_used = v["seats_used"] as int;
+                        v_total = v["seats_total"] as int;
+                        v_zone = v["zone"] as str;
+                        <div key={v_name} className="rounded-lg border border-border p-3 flex flex-col gap-1.5">
+                            <div className="flex items-center justify-between">
+                                <span className="font-medium text-sm">{v_name}</span>
+                                {v_status == "enroute" and <Badge className="text-xs">En route</Badge> or <Badge variant="secondary" className="text-xs">Idle</Badge>}
                             </div>
-                            <span className="text-muted-foreground text-xs text-right">{r_line}</span>
+                            <span className="text-muted-foreground text-xs capitalize">{v_zone + " zone"}</span>
+                            <span className="text-sm">{str(v_used) + " / " + str(v_total) + " seats used"}</span>
                         </div>
                     }}
-                </CardContent>
-            </Card>
-        }
+                </div>
+            </CardContent>
+        </Card>
 
-        {has_pathway and
+        {len(requests) > 0 and
             <Card>
                 <CardHeader>
-                    <div className="flex items-center justify-between gap-4">
-                        <CardTitle>Pathway actions</CardTitle>
-                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                            <Badge className="text-xs">{str(counts["completed"] as int) + " done"}</Badge>
-                            <Badge variant="secondary" className="text-xs">{str(counts["pending"] as int) + " pending"}</Badge>
-                            <Badge variant="outline" className="text-xs">{str(counts["awaiting_consent"] as int) + " consent"}</Badge>
-                            {(counts["blocked"] as int) > 0 and <Badge variant="destructive" className="text-xs">{str(counts["blocked"] as int) + " blocked"}</Badge>}
-                            {(counts["failed"] as int) > 0 and <Badge variant="destructive" className="text-xs">{str(counts["failed"] as int) + " failed"}</Badge>}
-                        </div>
-                    </div>
-                </CardHeader>
-                <CardContent className="flex flex-col gap-2">
-                    {for st in (pathway["steps"] as list) {
-                        st_order = st["order"] as int;
-                        st_label = st["label"] as str;
-                        st_detail = st["detail"] as str;
-                        st_status = st["status"] as str;
-                        <div key={str(st_order) + st_label} className="flex items-start justify-between gap-4 rounded-lg border border-border p-3">
-                            <div className="flex items-start gap-3">
-                                <span className="text-muted-foreground text-xs font-mono mt-0.5">{str(st_order)}</span>
-                                <div>
-                                    <p className="text-sm font-medium">{st_label}</p>
-                                    {st_detail != "" and <p className="text-muted-foreground text-xs">{st_detail}</p>}
-                                </div>
-                            </div>
-                            {step_badge(st_status)}
-                        </div>
-                    }}
-                </CardContent>
-            </Card>
-        }
-
-        {has_pathway and len(pathway["caseworker_tasks"] as list) > 0 and
-            <Card className="border-amber-400/50">
-                <CardHeader>
-                    <CardTitle>Cases requiring human intervention</CardTitle>
-                    <CardDescription>Escalated to a caseworker — the agent will not act on these alone.</CardDescription>
-                </CardHeader>
-                <CardContent className="flex flex-col gap-2">
-                    {for t in (pathway["caseworker_tasks"] as list) {
-                        t_label = t["label"] as str;
-                        t_reason = t["reason"] as str;
-                        <div key={t_label} className="flex items-start justify-between gap-4 rounded-lg border border-border p-3">
-                            <div>
-                                <p className="text-sm font-medium">{t_label}</p>
-                                <p className="text-muted-foreground text-xs">{t_reason}</p>
-                            </div>
-                            <Badge variant="outline" className="text-xs">Pending</Badge>
-                        </div>
-                    }}
-                </CardContent>
-            </Card>
-        }
-
-        {has_pathway and len(pathway["replan_history"] as list) > 0 and
-            <Card>
-                <CardHeader>
-                    <CardTitle>Replanning history</CardTitle>
-                    <CardDescription>What changed, and which completed progress was preserved.</CardDescription>
-                </CardHeader>
-                <CardContent className="flex flex-col gap-3">
-                    {for h in (pathway["replan_history"] as list) {
-                        h_from = h["from"] as str;
-                        h_to = h["to"] as str;
-                        h_reason = h["reason"] as str;
-                        h_preserved = h["preserved"] as list;
-                        <div key={h_from + h_to} className="rounded-lg border border-border p-3 flex flex-col gap-1">
-                            <p className="text-sm font-medium">{h_from + "  →  " + h_to}</p>
-                            <p className="text-muted-foreground text-xs">{h_reason}</p>
-                            {len(h_preserved) > 0 and <p className="text-muted-foreground text-xs">Preserved: {str(len(h_preserved)) + " completed step(s)"}</p>}
-                        </div>
-                    }}
-                </CardContent>
-            </Card>
-        }
-
-        {has_pathway and len(pathway["rejected"] as list) > 0 and
-            <Card>
-                <CardHeader>
-                    <CardTitle>Jobs rejected</CardTitle>
-                    <CardDescription>Positions the agent evaluated and ruled out, with the reason.</CardDescription>
+                    <CardTitle>All ride requests</CardTitle>
+                    <CardDescription>Every pathway the agent is currently coordinating.</CardDescription>
                 </CardHeader>
                 <CardContent>
                     <Table>
                         <TableHeader>
                             <TableRow>
-                                <TableHead>Job</TableHead>
-                                <TableHead>Reason rejected</TableHead>
+                                <TableHead>Participant</TableHead>
+                                <TableHead>Trip</TableHead>
+                                <TableHead>AV</TableHead>
+                                <TableHead className="text-right">Distance</TableHead>
+                                <TableHead className="text-right">ETA</TableHead>
+                                <TableHead className="text-right">Status</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
-                            {for r in (pathway["rejected"] as list) {
-                                r_title = r["title"] as str;
-                                r_emp = r["employer_name"] as str;
-                                r_reason = r["reason"] as str;
-                                <TableRow key={r_title}>
-                                    <TableCell>
-                                        <p className="font-medium">{r_title}</p>
-                                        <p className="text-muted-foreground text-xs">{r_emp}</p>
-                                    </TableCell>
-                                    <TableCell className="text-sm text-muted-foreground">{r_reason}</TableCell>
+                            {for r in requests {
+                                r_id = r["id"] as str;
+                                r_part = r["participant"] as str;
+                                r_pick = r["pickup_name"] as str;
+                                r_dest = r["dest_service"] as str;
+                                r_av = r["av_name"] as str;
+                                r_dist = r["distance_miles"] as float;
+                                r_eta = r["eta_min"] as int;
+                                r_status = r["status"] as str;
+                                <TableRow key={r_id}>
+                                    <TableCell className="font-medium">{r_part}</TableCell>
+                                    <TableCell className="text-sm text-muted-foreground">{r_pick + " → " + r_dest}</TableCell>
+                                    <TableCell className="text-sm">{r_av if r_av != "" else "—"}</TableCell>
+                                    <TableCell className="text-right text-sm">{f"{r_dist:.1f} mi"}</TableCell>
+                                    <TableCell className="text-right text-sm">{str(r_eta) + " min"}</TableCell>
+                                    <TableCell className="text-right">{status_badge(r_status)}</TableCell>
                                 </TableRow>
                             }}
                         </TableBody>
                     </Table>
-                </CardContent>
-            </Card>
-        }
-
-        {has_pathway and
-            <Card>
-                <CardHeader>
-                    <CardTitle>Agent activity log</CardTitle>
-                    <CardDescription>Observable actions the agent took — not hidden reasoning.</CardDescription>
-                </CardHeader>
-                <CardContent>
-                    <div className="flex flex-col gap-1.5">
-                        {for entry in (pathway["activity_log"] as list) {
-                            e_seq = entry["seq"] as int;
-                            e_msg = entry["message"] as str;
-                            <div key={str(e_seq)} className="flex items-start gap-3 text-sm">
-                                <span className="text-muted-foreground text-xs font-mono mt-0.5">{str(e_seq)}</span>
-                                <span>{e_msg}</span>
-                            </div>
-                        }}
-                    </div>
                 </CardContent>
             </Card>
         }

@@ -3,103 +3,60 @@
 # Note: tests share a persisted root across a run — run
 # `jac clean --all --force` first if results look stale.
 
-test "keyword classifier maps notes to categories" {
-    assert _classify_keyword("worked kitchen prep at a diner") == JobCategory.KITCHEN;
-    assert _classify_keyword("forklift operator in a warehouse") == JobCategory.WAREHOUSE;
-    assert _classify_keyword("front desk receptionist experience") == JobCategory.ADMIN;
-    assert _classify_keyword("hotel housekeeping for three years") == JobCategory.HOSPITALITY;
+test "distance in miles is directionally sane" {
+    d0 = calculate_distance_miles(37.7749, -122.4194, 37.7749, -122.4194);
+    assert d0 < 0.01;
+    dn = calculate_distance_miles(37.7749, -122.4194, 37.7849, -122.4194);
+    df = calculate_distance_miles(37.7749, -122.4194, 34.0522, -118.2437);
+    assert df > dn;
 }
 
-test "transit feasibility blocks pre-dawn shifts without a car" {
-    before = check_transit_feasibility(4, False);
-    assert not (before["ok"] as bool);
-    ok_shift = check_transit_feasibility(8, False);
-    assert ok_shift["ok"] as bool;
-    with_car = check_transit_feasibility(4, True);
-    assert with_car["ok"] as bool;
+test "dispatch picks the nearest AV that still has a free seat" {
+    near = root ++> AV(name="AV-NEAR", seats_total=2, lat=40.0001, lng=-120.0001, zone="test");
+    far = root ++> AV(name="AV-FAR", seats_total=2, lat=41.0, lng=-121.0, zone="test");
+    full = root ++> AV(name="AV-FULL", seats_total=1, seats_used=1, lat=40.00002, lng=-120.00002, zone="test");
+    chosen = dispatch_av(40.0, -120.0);
+    assert isinstance(chosen, AV);
+    if isinstance(chosen, AV) {
+        # AV-FULL is closer but has no seat, so the nearest *available* wins
+        assert chosen.name == "AV-NEAR";
+    }
 }
 
-test "infeasible jobs are rejected with a reason" {
-    p = root ++> Participant(
-        name="Test Feasibility", notes="warehouse loading", category=JobCategory.WAREHOUSE,
-        availability="morning", has_car=False, documents=["id"], needs_income=True
+test "request_ride dispatches the nearest AV, consumes a seat, plans a 3-leg route, recommends next" {
+    dests = api_destinations();
+    dest = dests[0];
+    myav = root ++> AV(name="AV-TESTDISPATCH", seats_total=2, lat=39.5, lng=-119.5, zone="test");
+    state = api_request_ride(
+        "Iso Rider", "restaurant experience", "morning", False, "food",
+        "Iso Pickup", 39.5001, -119.5001, dest["id"] as str
     );
-    overnight = root ++> Job(
-        title="Overnight Loader", employer_name="Test Freight", category=JobCategory.WAREHOUSE,
-        address="1 Dock Rd", zone="south", lat=37.7, lng=-122.4, open_spots=1, wage_hint="",
-        shift_start_hour=4, shift_label="Overnight 4am–12pm", required_docs=[], required_items=[]
-    );
-    ev = evaluate_job_feasibility(overnight, p);
-    assert not (ev["feasible"] as bool);
-    assert len(ev["reasons"] as list) > 0;
+    cur = state["current"] as dict;
+    assert (cur["status"] as str) == "dispatched";
+    assert (cur["av_name"] as str) == "AV-TESTDISPATCH";
+    assert myav.seats_used == 1;
+    assert len(cur["route"] as list) == 3;
+    assert "id" in (cur["next_service"] as dict);
 }
 
-test "build_pathway selects a feasible job, resolves barriers, and awaits consent" {
-    stop = root ++> ServiceStop(
-        name="Test Center A", stop_type="jobs", zone="north", base_cost=0, bonus_on_visit=0
+test "participant with a car is routed as self-transport, no AV consumed" {
+    dests = api_destinations();
+    dest = dests[0];
+    state = api_request_ride(
+        "Car Rider", "has a car", "morning", True, "food",
+        "Mission Homes", 37.7600, -122.4180, dest["id"] as str
     );
-    kitchen = root ++> Job(
-        title="Test Kitchen", employer_name="Test Diner", category=JobCategory.KITCHEN,
-        address="1 Test St", zone="north", lat=37.786, lng=-122.411, open_spots=1, wage_hint="$18/hr",
-        shift_start_hour=8, shift_label="Morning 8am–2pm",
-        required_docs=["resume"], required_items=["work_shoes"]
-    );
-    shoes = root ++> SupportResource(
-        name="Test Closet", resource_type="work_shoes", provider="Test Shelter",
-        zone="north", capacity=3
-    );
-    p = root ++> Participant(
-        name="Test Maya", notes="restaurant experience", category=JobCategory.KITCHEN,
-        availability="morning", has_car=False, documents=["id"], needs_income=True
-    );
-    p +>:VISITED():+> stop;
-
-    res = api_build_pathway(jid(p));
-    assert (res["status"] as str) == "active";
-    assert (res["selected"]["title"] as str) == "Test Kitchen";
-    # résumé + work-shoe barriers detected and resolved
-    assert len(res["barriers"] as list) == 2;
-    # a work-shoe reservation really decremented the resource
-    assert shoes.capacity == 2;
-    # at least one step is awaiting consent before submission
-    assert (res["counts"]["awaiting_consent"] as int) >= 1;
+    cur = state["current"] as dict;
+    assert (cur["status"] as str) == "self_transport";
+    assert (cur["av_name"] as str) == "";
+    assert len(cur["route"] as list) == 2;
 }
 
-test "replan keeps completed progress and switches to a feasible alternative" {
-    stop = root ++> ServiceStop(
-        name="Test Center B", stop_type="jobs", zone="north", base_cost=0, bonus_on_visit=0
-    );
-    kitchen = root ++> Job(
-        title="Replan Kitchen", employer_name="Diner B", category=JobCategory.KITCHEN,
-        address="2 Test St", zone="north", lat=37.786, lng=-122.411, open_spots=1, wage_hint="$18/hr",
-        shift_start_hour=8, shift_label="Morning 8am–2pm",
-        required_docs=["resume"], required_items=["work_shoes"]
-    );
-    hotel = root ++> Job(
-        title="Replan Hotel", employer_name="Inn B", category=JobCategory.HOSPITALITY,
-        address="3 Test St", zone="north", lat=37.787, lng=-122.408, open_spots=1, wage_hint="$18/hr",
-        shift_start_hour=9, shift_label="Morning 9am–3pm",
-        required_docs=["resume"], required_items=["work_shoes"]
-    );
-    shoes = root ++> SupportResource(
-        name="Test Closet B", resource_type="work_shoes", provider="Shelter B",
-        zone="north", capacity=3
-    );
-    p = root ++> Participant(
-        name="Replan Maya", notes="restaurant experience", category=JobCategory.KITCHEN,
-        availability="morning", has_car=False, documents=["id"], needs_income=True
-    );
-    p +>:VISITED():+> stop;
-
-    built = api_build_pathway(jid(p));
-    assert (built["selected"]["title"] as str) == "Replan Kitchen";
-    cap_after_build = shoes.capacity;
-
-    replanned = api_replan(built["pathway_id"] as str);
-    # switched away from the filled kitchen job
-    assert (replanned["selected"]["title"] as str) != "Replan Kitchen";
-    # replan history explains the change
-    assert len(replanned["replan_history"] as list) == 1;
-    # completed prep was preserved: the work-shoe reservation was NOT re-reserved
-    assert shoes.capacity == cap_after_build;
+test "fleet state exposes capacity, pickups, and destinations" {
+    state = api_fleet_state();
+    cap = state["capacity"] as dict;
+    assert (cap["total"] as int) > 0;
+    assert (cap["free"] as int) <= (cap["total"] as int);
+    assert len(state["pickups"] as list) > 0;
+    assert len(state["destinations"] as list) > 0;
 }

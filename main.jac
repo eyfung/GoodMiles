@@ -3,12 +3,12 @@ import from services.goodmiles {
     Neighbor, ServiceStop, Trip, Seeded
 }
 import from services.pathway {
-    api_service_stops, api_suggest_category, api_create_participant,
-    api_build_pathway, api_grant_consent, api_replan,
-    Participant, Job, SupportResource, Pathway, PathwaySeeded
+    api_pickup_points, api_destinations, api_fleet_state, api_request_ride, api_reset_fleet,
+    AV, RideRequest, FleetSeeded
 }
 
 cl import ".styles.global.css";
+cl import "leaflet/dist/leaflet.css";
 cl import from ".components.NeighborsView" { NeighborsView }
 cl import from ".components.ServiceStopsView" { ServiceStopsView }
 cl import from ".components.OptimizeView" { OptimizeView }
