@@ -477,7 +477,9 @@ def:pub NeighborsView() -> JsxElement {
                                             className="mt-1.5 w-full resize-y rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
                                         />
                                         {saving_note_id == session_id and <p className="mt-1 text-xs text-muted-foreground">Saving...</p>}
-                                        <span className={"mt-2 inline-block rounded-full px-2.5 py-1 text-xs font-medium " + feeling_class(session_feeling)}>{session_feeling}</span>
+                                        {session_feeling != "Not recorded" and
+                                            <span className={"mt-2 inline-block rounded-full px-2.5 py-1 text-xs font-medium " + feeling_class(session_feeling)}>{session_feeling}</span>
+                                        }
                                     </div>
                                 </div>
                             }}
