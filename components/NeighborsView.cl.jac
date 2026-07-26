@@ -435,7 +435,8 @@ def:pub NeighborsView() -> JsxElement {
                             {for (session_index, session) in enumerate(wellbeing_history) {
                                 session_stop = session["stop"] as str;
                                 session_feeling = session["feeling"] as str;
-                                session_bonus = session["bonus"] as int;
+                                session_net = session["net"] as int;
+                                net_class = "text-sm font-medium " + ("text-emerald-600" if session_net >= 0 else "text-rose-600");
                                 note_text = session_feeling if session_feeling != "Not recorded" else "No notes recorded";
                                 <div key={session["id"] as str} className="border-b border-border last:border-b-0 p-4">
                                     <div className="flex items-start justify-between gap-4">
@@ -443,8 +444,8 @@ def:pub NeighborsView() -> JsxElement {
                                             <p className="text-sm font-medium">{session_stop}</p>
                                             <p className="text-xs text-muted-foreground mt-1">{"Session " + str(session_index + 1)}</p>
                                         </div>
-                                        <span className="text-sm font-medium text-emerald-600">
-                                            {"+" + str(session_bonus) + " pts gained"}
+                                        <span className={net_class}>
+                                            {("+" if session_net > 0 else "") + str(session_net) + " pts net"}
                                         </span>
                                     </div>
                                     <div className="mt-3 rounded-lg bg-muted/50 px-3 py-2.5">
