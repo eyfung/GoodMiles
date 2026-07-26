@@ -1,4 +1,5 @@
 # GoodMiles — Graph nodes, seed data, allocation engine, API endpoints
+import from datetime { datetime }
 
 # ===========================
 # Node definitions
@@ -27,6 +28,9 @@ node Trip {
     has stop_name: str;
     has cost: int;
     has bonus: int;
+    has feeling: str = "Not recorded";
+    has notes: str = "";
+    has notes_saved_at: str = "";
 }
 
 node Seeded {
@@ -113,6 +117,21 @@ def:pub api_neighbors() -> list[dict] {
         if upskill_progress > 100 {
             upskill_progress = 100;
         }
+        wellbeing_history: list[dict] = [];
+        for t in [root-->][?:Trip] {
+            if t.neighbor_name == n.name {
+                wellbeing_history = wellbeing_history + [{
+                    "id": jid(t),
+                    "stop": t.stop_name,
+                    "cost": t.cost,
+                    "bonus": t.bonus,
+                    "net": t.bonus - t.cost,
+                    "feeling": t.feeling,
+                    "notes": getattr(t, "notes", ""),
+                    "notes_saved_at": getattr(t, "notes_saved_at", "")
+                }];
+            }
+        }
         result = result + [{
             "id": jid(n),
             "name": n.name,
@@ -120,7 +139,8 @@ def:pub api_neighbors() -> list[dict] {
             "points_earned": n.points_earned,
             "points_spent": n.points_spent,
             "home_zone": n.home_zone,
-            "upskill_progress": upskill_progress
+            "upskill_progress": upskill_progress,
+            "wellbeing_history": wellbeing_history
         }];
     }
     return result;
@@ -180,6 +200,45 @@ def:pub api_delete_neighbor(person_id: str) -> dict {
         }
     }
     return {"error": "Person not found"};
+}
+
+def:pub api_update_neighbor(person_id: str, name: str, home_zone: str) -> dict {
+    clean_name = name.strip();
+    clean_zone = home_zone.lower();
+    if clean_name == "" {
+        return {"error": "Name is required"};
+    }
+    if clean_zone not in ["north", "central", "south"] {
+        return {"error": "Select a valid region"};
+    }
+    person: Neighbor | None = None;
+    for n in get_all_neighbors() {
+        if jid(n) == person_id {
+            person = n;
+        } elif n.name.lower() == clean_name.lower() {
+            return {"error": "A person with this name already exists"};
+        }
+    }
+    if person == None {
+        return {"error": "Person not found"};
+    }
+
+    previous_name = person.name;
+    person.name = clean_name;
+    person.home_zone = clean_zone;
+    if previous_name != clean_name {
+        for t in [root-->][?:Trip] {
+            if t.neighbor_name == previous_name {
+                t.neighbor_name = clean_name;
+            }
+        }
+    }
+    return {
+        "status": "updated",
+        "id": jid(person),
+        "name": person.name,
+        "home_zone": person.home_zone
+    };
 }
 
 def:pub api_stops() -> list[dict] {
@@ -258,7 +317,7 @@ def:pub api_optimize(neighbor_name: str) -> dict {
     };
 }
 
-def:pub api_execute(neighbor_name: str, stop_name: str) -> dict {
+def:pub api_execute(neighbor_name: str, stop_name: str, feeling: str = "Not recorded", notes: str = "") -> dict {
     neighbor = get_neighbor(neighbor_name);
     stop = get_stop(stop_name);
 
@@ -268,6 +327,10 @@ def:pub api_execute(neighbor_name: str, stop_name: str) -> dict {
 
     cost = stop.base_cost;
     bonus = stop.bonus_on_visit;
+    recorded_feeling = feeling;
+    if recorded_feeling not in ["Great", "Good", "Okay", "Struggling", "Distressed"] {
+        recorded_feeling = "Not recorded";
+    }
 
     if neighbor.points_balance < cost {
         return {"error": "Insufficient points", "balance": neighbor.points_balance, "cost": cost};
@@ -278,7 +341,16 @@ def:pub api_execute(neighbor_name: str, stop_name: str) -> dict {
     neighbor.points_earned = neighbor.points_earned + bonus;
 
     trip_id = neighbor.name + "-" + stop.name + "-" + str(neighbor.points_spent);
-    root ++> Trip(trip_id=trip_id, neighbor_name=neighbor.name, stop_name=stop.name, cost=cost, bonus=bonus);
+    root ++> Trip(
+        trip_id=trip_id,
+        neighbor_name=neighbor.name,
+        stop_name=stop.name,
+        cost=cost,
+        bonus=bonus,
+        feeling=recorded_feeling,
+        notes=notes,
+        notes_saved_at=datetime.now().strftime("%m/%d/%Y %H:%M")
+    );
 
     return {
         "status": "completed",
@@ -286,8 +358,27 @@ def:pub api_execute(neighbor_name: str, stop_name: str) -> dict {
         "stop": stop.name,
         "cost": cost,
         "bonus": bonus,
+        "feeling": recorded_feeling,
+        "notes": notes,
         "new_balance": neighbor.points_balance
     };
+}
+
+def:pub api_update_trip_notes(trip_id: str, notes: str) -> dict {
+    for t in [root-->][?:Trip] {
+        if jid(t) == trip_id {
+            saved_at = datetime.now().strftime("%m/%d/%Y %H:%M");
+            t.notes = notes;
+            t.notes_saved_at = saved_at;
+            return {
+                "status": "updated",
+                "id": trip_id,
+                "notes": t.notes,
+                "notes_saved_at": saved_at
+            };
+        }
+    }
+    return {"error": "Session not found"};
 }
 
 def:pub api_trips() -> list[dict] {
@@ -298,7 +389,10 @@ def:pub api_trips() -> list[dict] {
             "neighbor": t.neighbor_name,
             "stop": t.stop_name,
             "cost": t.cost,
-            "bonus": t.bonus
+            "bonus": t.bonus,
+            "feeling": t.feeling,
+            "notes": getattr(t, "notes", ""),
+            "notes_saved_at": getattr(t, "notes_saved_at", "")
         }];
     }
     return result;

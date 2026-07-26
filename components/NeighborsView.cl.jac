@@ -10,7 +10,7 @@ import from "@hugeicons/core-free-icons" {
     Delete02Icon,
     UnfoldMoreIcon
 }
-sv import from "..services.goodmiles" { api_neighbors, api_add_neighbor, api_delete_neighbor }
+sv import from "..services.goodmiles" { api_neighbors, api_add_neighbor, api_delete_neighbor, api_update_neighbor, api_update_trip_notes }
 
 def:pub NeighborsView() -> JsxElement {
     has neighbors: list[dict] = [];
@@ -24,6 +24,19 @@ def:pub NeighborsView() -> JsxElement {
     has adding: bool = False;
     has form_error: str = "";
     has deleting_id: str = "";
+    has editing_person_id: str = "";
+    has edit_name: str = "";
+    has edit_zone: str = "";
+    has editing_person: bool = False;
+    has edit_error: str = "";
+    has wellbeing_person: str = "";
+    has wellbeing_history: list[dict] = [];
+    has editing_note_id: str = "";
+    has editing_note_text: str = "";
+    has saving_note_id: str = "";
+    has saved_note_id: str = "";
+    has saved_note_at: str = "";
+    has note_error: str = "";
 
     async can with entry {
         try {
@@ -100,6 +113,115 @@ def:pub NeighborsView() -> JsxElement {
             error = str(ex);
         }
         deleting_id = "";
+    }
+
+    def open_edit(person_id: str, person_name: str, person_zone: str) {
+        editing_person_id = person_id;
+        edit_name = person_name;
+        edit_zone = person_zone;
+        edit_error = "";
+    }
+
+    def close_edit(_e: MouseEvent) {
+        if not editing_person {
+            editing_person_id = "";
+            edit_error = "";
+        }
+    }
+
+    async def submit_edit(e: FormEvent) -> None {
+        e.preventDefault();
+        editing_person = True;
+        edit_error = "";
+        try {
+            data: any = await api_update_neighbor(editing_person_id, edit_name, edit_zone);
+            result = data as dict;
+            if "error" in result {
+                edit_error = result["error"] as str;
+            } else {
+                refreshed: any = await api_neighbors();
+                neighbors = refreshed as list[dict];
+                editing_person_id = "";
+            }
+        } except Exception as ex {
+            edit_error = str(ex);
+        }
+        editing_person = False;
+    }
+
+    def open_wellbeing(person_name: str, history: list[dict]) {
+        wellbeing_person = person_name;
+        wellbeing_history = history;
+        editing_note_id = "";
+        editing_note_text = "";
+        saved_note_id = "";
+        saved_note_at = "";
+    }
+
+    def close_wellbeing(_e: MouseEvent) {
+        wellbeing_person = "";
+        wellbeing_history = [];
+        editing_note_id = "";
+        editing_note_text = "";
+        saved_note_id = "";
+        saved_note_at = "";
+        note_error = "";
+    }
+
+    def update_note_draft(session_id: str, notes: str) {
+        editing_note_id = session_id;
+        editing_note_text = notes;
+        if saved_note_id == session_id {
+            saved_note_id = "";
+            saved_note_at = "";
+        }
+    }
+
+    async def save_session_notes(session_id: str, notes: str) -> None {
+        saving_note_id = session_id;
+        note_error = "";
+        try {
+            data: any = await api_update_trip_notes(session_id, notes);
+            result = data as dict;
+            if "error" in result {
+                note_error = result["error"] as str;
+            } else {
+                saved_note_id = session_id;
+                saved_note_at = result["notes_saved_at"] as str;
+                refreshed: any = await api_neighbors();
+                refreshed_neighbors = refreshed as list[dict];
+                neighbors = refreshed_neighbors;
+                for person in refreshed_neighbors {
+                    if (person["name"] as str) == wellbeing_person {
+                        wellbeing_history = person["wellbeing_history"] as list[dict];
+                    }
+                }
+                editing_note_id = "";
+                editing_note_text = "";
+            }
+        } except Exception as ex {
+            note_error = str(ex);
+        }
+        saving_note_id = "";
+    }
+
+    def feeling_class(feeling: str) -> str {
+        if feeling == "Great" {
+            return "bg-emerald-100 text-emerald-800";
+        }
+        elif feeling == "Good" {
+            return "bg-lime-100 text-lime-800";
+        }
+        elif feeling == "Okay" {
+            return "bg-amber-100 text-amber-800";
+        }
+        elif feeling == "Struggling" {
+            return "bg-orange-100 text-orange-800";
+        }
+        elif feeling == "Distressed" {
+            return "bg-rose-100 text-rose-800";
+        }
+        return "bg-muted text-muted-foreground";
     }
 
     visible_neighbors: list[dict] = [];
@@ -180,7 +302,7 @@ def:pub NeighborsView() -> JsxElement {
                         <span className="text-2xl font-semibold text-amber-700">{str(not_started_count)}</span>
                     </div>
                 </div>
-                <div className="rounded-xl border border-lime-200 bg-lime-50/70 p-4">
+                <div className="rounded-xl border border-lime-300 bg-lime-100 p-4">
                     <div className="flex items-center justify-between">
                         <div>
                             <p className="text-sm font-medium text-lime-900">In progress</p>
@@ -219,18 +341,19 @@ def:pub NeighborsView() -> JsxElement {
                             <TableHead className="h-12 px-4">
                                 <span className="inline-flex items-center gap-1.5">Home Zone <HugeiconsIcon icon={UnfoldMoreIcon} strokeWidth={2} className="size-3.5 text-muted-foreground" /></span>
                             </TableHead>
-                            <TableHead className="h-12 px-4">
-                                <span className="inline-flex items-center gap-1.5">Points Balance <HugeiconsIcon icon={UnfoldMoreIcon} strokeWidth={2} className="size-3.5 text-muted-foreground" /></span>
+                            <TableHead className="h-12 w-24 px-2 text-center text-xs">
+                                <span className="inline-flex items-center justify-center gap-1 leading-tight whitespace-normal">Points Balance <HugeiconsIcon icon={UnfoldMoreIcon} strokeWidth={2} className="size-3.5 text-muted-foreground shrink-0" /></span>
                             </TableHead>
-                            <TableHead className="h-12 px-4">
-                                <span className="inline-flex items-center gap-1.5">Points Earned <HugeiconsIcon icon={UnfoldMoreIcon} strokeWidth={2} className="size-3.5 text-muted-foreground" /></span>
+                            <TableHead className="h-12 w-24 px-2 text-center text-xs">
+                                <span className="inline-flex items-center justify-center gap-1 leading-tight whitespace-normal">Points Earned <HugeiconsIcon icon={UnfoldMoreIcon} strokeWidth={2} className="size-3.5 text-muted-foreground shrink-0" /></span>
                             </TableHead>
-                            <TableHead className="h-12 px-4">
-                                <span className="inline-flex items-center gap-1.5">Points Spent <HugeiconsIcon icon={UnfoldMoreIcon} strokeWidth={2} className="size-3.5 text-muted-foreground" /></span>
+                            <TableHead className="h-12 w-24 px-2 text-center text-xs">
+                                <span className="inline-flex items-center justify-center gap-1 leading-tight whitespace-normal">Points Spent <HugeiconsIcon icon={UnfoldMoreIcon} strokeWidth={2} className="size-3.5 text-muted-foreground shrink-0" /></span>
                             </TableHead>
-                            <TableHead className="h-12 px-4">
-                                <span className="inline-flex items-center gap-1.5">Net Gained <HugeiconsIcon icon={UnfoldMoreIcon} strokeWidth={2} className="size-3.5 text-muted-foreground" /></span>
+                            <TableHead className="h-12 w-24 px-2 text-center text-xs">
+                                <span className="inline-flex items-center justify-center gap-1 leading-tight whitespace-normal">Net Gained <HugeiconsIcon icon={UnfoldMoreIcon} strokeWidth={2} className="size-3.5 text-muted-foreground shrink-0" /></span>
                             </TableHead>
+                            <TableHead className="h-12 px-4">Check-In</TableHead>
                             <TableHead className="h-12 px-4 text-center">Actions</TableHead>
                         </TableRow>
                     </TableHeader>
@@ -238,6 +361,7 @@ def:pub NeighborsView() -> JsxElement {
                         {loading and
                             <TableRow>
                                 <TableCell className="h-16 px-4"><Skeleton className="h-4 w-24" /></TableCell>
+                                <TableCell className="h-16 px-4"><Skeleton className="h-4 w-20" /></TableCell>
                                 <TableCell className="h-16 px-4"><Skeleton className="h-4 w-20" /></TableCell>
                                 <TableCell className="h-16 px-4"><Skeleton className="h-4 w-20" /></TableCell>
                                 <TableCell className="h-16 px-4"><Skeleton className="h-4 w-20" /></TableCell>
@@ -268,7 +392,8 @@ def:pub NeighborsView() -> JsxElement {
                                 progress_color = "bg-yellow-400";
                             }
                             net_gained = earned - spent;
-                            net_class = "px-4 font-medium " + ("text-emerald-600" if net_gained >= 0 else "text-rose-600");
+                            net_class = "w-24 px-2 text-center font-medium " + ("text-emerald-600" if net_gained >= 0 else "text-rose-600");
+                            history = n["wellbeing_history"] as list[dict];
                             <TableRow key={id_str} className="h-16">
                                 <TableCell className="px-4">
                                     <div className="w-44">
@@ -287,13 +412,28 @@ def:pub NeighborsView() -> JsxElement {
                                 </TableCell>
                                 <TableCell className="px-4 font-medium">{name_str}</TableCell>
                                 <TableCell className="px-4 capitalize">{zone_str}</TableCell>
-                                <TableCell className="px-4">{str(balance)}</TableCell>
-                                <TableCell className="px-4">{str(earned)}</TableCell>
-                                <TableCell className="px-4">{str(spent)}</TableCell>
+                                <TableCell className="w-24 px-2 text-center">{str(balance)}</TableCell>
+                                <TableCell className="w-24 px-2 text-center">{str(earned)}</TableCell>
+                                <TableCell className="w-24 px-2 text-center">{str(spent)}</TableCell>
                                 <TableCell className={net_class}>{("+" if net_gained > 0 else "") + str(net_gained)}</TableCell>
                                 <TableCell className="px-4">
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={lambda { open_wellbeing(name_str, history); }}
+                                        title={"View " + name_str + "'s check-in history"}
+                                    >
+                                        View
+                                    </Button>
+                                </TableCell>
+                                <TableCell className="px-4">
                                     <div className="flex items-center justify-center gap-1">
-                                        <Button variant="ghost" size="icon-sm" title={"Edit " + name_str + " name or home zone"}>
+                                        <Button
+                                            variant="ghost"
+                                            size="icon-sm"
+                                            title={"Edit " + name_str + " name or home zone"}
+                                            onClick={lambda { open_edit(id_str, name_str, zone_str); }}
+                                        >
                                             <HugeiconsIcon icon={PencilEdit01Icon} strokeWidth={2} className="size-4" />
                                         </Button>
                                         <Button
@@ -312,7 +452,7 @@ def:pub NeighborsView() -> JsxElement {
                         }}
                         {not loading and len(visible_neighbors) == 0 and
                             <TableRow>
-                                <TableCell colSpan={8} className="h-32 text-center text-muted-foreground">
+                                <TableCell colSpan={9} className="h-32 text-center text-muted-foreground">
                                     No people match this search and zone.
                                 </TableCell>
                             </TableRow>
@@ -362,6 +502,131 @@ def:pub NeighborsView() -> JsxElement {
                             <Button type="submit" disabled={adding}>{("Adding..." if adding else "Add Person")}</Button>
                         </div>
                     </form>
+                </div>
+            </div>
+        }
+
+        {editing_person_id != "" and
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/35 p-4">
+                <div className="w-full max-w-md rounded-xl border border-border bg-background p-6 shadow-xl">
+                    <div className="mb-5">
+                        <h2 className="text-xl font-semibold">Edit Person</h2>
+                        <p className="text-sm text-muted-foreground mt-1">Update their name or home zone.</p>
+                    </div>
+                    <form onSubmit={submit_edit} className="space-y-4">
+                        <div>
+                            <label htmlFor="edit-person-name" className="text-sm font-medium">Name</label>
+                            <input
+                                id="edit-person-name"
+                                value={edit_name}
+                                onChange={lambda (e: any) { edit_name = e.target.value; }}
+                                autoFocus={True}
+                                className="mt-1.5 h-10 w-full rounded-lg border border-input bg-background px-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
+                            />
+                        </div>
+                        <div>
+                            <label className="text-sm font-medium">Home Zone</label>
+                            <Select value={edit_zone} onValueChange={lambda (v: str) { edit_zone = v; }}>
+                                <SelectTrigger className="mt-1.5 h-10 w-full">
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectGroup>
+                                        <SelectItem value="north">North</SelectItem>
+                                        <SelectItem value="central">Central</SelectItem>
+                                        <SelectItem value="south">South</SelectItem>
+                                    </SelectGroup>
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        {edit_error != "" and <p className="text-sm text-destructive">{edit_error}</p>}
+                        <div className="flex justify-end gap-2 pt-2">
+                            <Button type="button" variant="outline" onClick={close_edit} disabled={editing_person}>Cancel</Button>
+                            <Button type="submit" disabled={editing_person}>{("Saving..." if editing_person else "Save Changes")}</Button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        }
+
+        {wellbeing_person != "" and
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/35 p-4">
+                <div className="w-full max-w-2xl rounded-xl border border-border bg-background p-6 shadow-xl">
+                    <div className="flex items-start justify-between gap-4 mb-5">
+                        <div>
+                            <div className="flex items-center gap-2">
+                                <h2 className="text-xl font-semibold">{wellbeing_person}</h2>
+                                <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
+                                    {str(len(wellbeing_history)) + (" session" if len(wellbeing_history) == 1 else " sessions")}
+                                </span>
+                            </div>
+                            <p className="text-sm text-muted-foreground mt-1">Session history, net points, and check-in notes.</p>
+                        </div>
+                        <Button variant="ghost" size="sm" onClick={close_wellbeing}>Close</Button>
+                    </div>
+                    {len(wellbeing_history) == 0 and
+                        <div className="rounded-lg bg-muted/50 py-10 text-center text-sm text-muted-foreground">
+                            No completed sessions yet.
+                        </div>
+                    }
+                    {len(wellbeing_history) > 0 and
+                        <div className="max-h-[420px] overflow-y-auto rounded-lg border border-border">
+                            {for (session_index, session) in enumerate(wellbeing_history) {
+                                session_id = session["id"] as str;
+                                session_stop = session["stop"] as str;
+                                session_feeling = session["feeling"] as str;
+                                session_notes = session["notes"] as str;
+                                session_saved_at = session["notes_saved_at"] as str;
+                                displayed_notes = editing_note_text if editing_note_id == session_id else session_notes;
+                                displayed_saved_at = saved_note_at if saved_note_id == session_id else session_saved_at;
+                                has_unsaved_changes = editing_note_id == session_id;
+                                session_net = session["net"] as int;
+                                net_class = "text-sm font-medium " + ("text-emerald-600" if session_net >= 0 else "text-rose-600");
+                                <div key={session["id"] as str} className="border-b border-border last:border-b-0 p-4">
+                                    <div className="flex items-start justify-between gap-4">
+                                        <div>
+                                            <p className="text-sm font-medium">{session_stop}</p>
+                                            <p className="text-xs text-muted-foreground mt-1">{"Session " + str(session_index + 1)}</p>
+                                        </div>
+                                        <span className={net_class}>
+                                            {("+" if session_net > 0 else "") + str(session_net) + " pts net"}
+                                        </span>
+                                    </div>
+                                    <div className="mt-3 rounded-lg bg-muted/50 px-3 py-2.5">
+                                        <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Notes</p>
+                                        <textarea
+                                            defaultValue={session_notes}
+                                            onChange={lambda (e: any) { update_note_draft(session_id, e.target.value); }}
+                                            placeholder="Type notes about this session..."
+                                            rows={3}
+                                            className="mt-1.5 w-full resize-y rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
+                                        />
+                                        <div className="mt-2 flex items-center justify-between gap-3">
+                                            <div>
+                                                {session_feeling != "Not recorded" and
+                                                    <span className={"inline-block rounded-full px-2.5 py-1 text-xs font-medium " + feeling_class(session_feeling)}>{session_feeling}</span>
+                                                }
+                                                {session_feeling == "Not recorded" and displayed_notes.strip() == "" and
+                                                    <span className="inline-block rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">Not recorded</span>
+                                                }
+                                            </div>
+                                            <Button
+                                                size="sm"
+                                                disabled={saving_note_id != "" or (not has_unsaved_changes and displayed_saved_at != "")}
+                                                onClick={lambda { save_session_notes(session_id, displayed_notes); }}
+                                            >
+                                                {("Saving..." if saving_note_id == session_id else ("Saved" if not has_unsaved_changes and displayed_saved_at != "" else "Save"))}
+                                            </Button>
+                                        </div>
+                                        {not has_unsaved_changes and displayed_saved_at != "" and
+                                            <p className="mt-1 text-right text-xs text-muted-foreground">{"Saved " + displayed_saved_at}</p>
+                                        }
+                                    </div>
+                                </div>
+                            }}
+                        </div>
+                    }
+                    {note_error != "" and <p className="mt-3 text-sm text-destructive">{"Could not save notes: " + note_error}</p>}
                 </div>
             </div>
         }
