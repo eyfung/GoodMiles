@@ -303,10 +303,6 @@ def:pub NeighborsView() -> JsxElement {
                             net_gained = earned - spent;
                             net_class = "w-24 px-2 text-center font-medium " + ("text-emerald-600" if net_gained >= 0 else "text-rose-600");
                             history = n["wellbeing_history"] as list[dict];
-                            latest_feeling = "No sessions";
-                            if len(history) > 0 {
-                                latest_feeling = history[len(history) - 1]["feeling"] as str;
-                            }
                             <TableRow key={id_str} className="h-16">
                                 <TableCell className="px-4">
                                     <div className="w-44">
@@ -336,7 +332,7 @@ def:pub NeighborsView() -> JsxElement {
                                         onClick={lambda { open_wellbeing(name_str, history); }}
                                         title={"View " + name_str + "'s wellbeing history"}
                                     >
-                                        {latest_feeling + " · " + str(len(history))}
+                                        View
                                     </Button>
                                 </TableCell>
                                 <TableCell className="px-4">
@@ -419,7 +415,12 @@ def:pub NeighborsView() -> JsxElement {
                 <div className="w-full max-w-2xl rounded-xl border border-border bg-background p-6 shadow-xl">
                     <div className="flex items-start justify-between gap-4 mb-5">
                         <div>
-                            <h2 className="text-xl font-semibold">{wellbeing_person + " — Wellbeing"}</h2>
+                            <div className="flex items-center gap-2">
+                                <h2 className="text-xl font-semibold">{wellbeing_person}</h2>
+                                <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
+                                    {str(len(wellbeing_history)) + (" session" if len(wellbeing_history) == 1 else " sessions")}
+                                </span>
+                            </div>
                             <p className="text-sm text-muted-foreground mt-1">Session history, point impact, and recorded feelings.</p>
                         </div>
                         <Button variant="ghost" size="sm" onClick={close_wellbeing}>Close</Button>
