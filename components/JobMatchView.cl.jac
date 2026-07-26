@@ -9,7 +9,7 @@ import from ".ui.field" { Field, FieldLabel }
 import from ".ui.skeleton" { Skeleton }
 import from ".ui.spinner" { Spinner }
 sv import from "..services.jobmatch" {
-    api_community_centers, api_suggest_category, api_create_job_seeker, api_find_best_jobs
+    api_service_stops, api_suggest_category, api_create_job_seeker, api_find_best_jobs
 }
 
 glob _CATEGORY_OPTIONS: list[dict] = [
@@ -30,10 +30,30 @@ def category_label(value: str) -> str {
     return value;
 }
 
+def cap(value: str) -> str {
+    if value == "" {
+        return value;
+    }
+    return value.capitalize();
+}
+
+def hop_label(dist: int) -> str {
+    if dist <= 0 {
+        return "same zone";
+    }
+    if dist >= 99 {
+        return "different area";
+    }
+    if dist == 1 {
+        return "1 zone away";
+    }
+    return str(dist) + " zones away";
+}
+
 def:pub JobMatchView() -> JsxElement {
-    has centers: list[dict] = [];
-    has loading_centers: bool = True;
-    has selected_center: str = "";
+    has stops: list[dict] = [];
+    has loading_stops: bool = True;
+    has selected_stop: str = "";
 
     has seeker_name: str = "";
     has notes: str = "";
@@ -44,6 +64,8 @@ def:pub JobMatchView() -> JsxElement {
     has confirmed_category: str = "";
 
     has finding: bool = False;
+    has origin: dict = {};
+    has recommended: dict = {};
     has matches: list[dict] = [];
     has has_results: bool = False;
 
@@ -51,12 +73,12 @@ def:pub JobMatchView() -> JsxElement {
 
     async can with entry {
         try {
-            data: any = await api_community_centers();
-            centers = data as list[dict];
+            data: any = await api_service_stops();
+            stops = data as list[dict];
         } except Exception as e {
             error = str(e);
         }
-        loading_centers = False;
+        loading_stops = False;
     }
 
     def handle_name_change(e: ChangeEvent) {
@@ -88,21 +110,24 @@ def:pub JobMatchView() -> JsxElement {
     }
 
     async def handle_find_jobs() -> None {
-        if seeker_name == "" or selected_center == "" or confirmed_category == "" {
+        if seeker_name == "" or selected_stop == "" or confirmed_category == "" {
             return;
         }
         finding = True;
         error = "";
         has_results = False;
         try {
-            created: any = await api_create_job_seeker(seeker_name, notes, confirmed_category, selected_center);
+            created: any = await api_create_job_seeker(seeker_name, notes, confirmed_category, selected_stop);
             seeker = created as dict;
             if "error" in seeker {
                 error = seeker["error"] as str;
             } else {
                 seeker_id = seeker["id"] as str;
                 data: any = await api_find_best_jobs(seeker_id);
-                matches = data as list[dict];
+                res = data as dict;
+                origin = res["origin"] as dict;
+                recommended = res["recommended"] as dict;
+                matches = res["matches"] as list[dict];
                 has_results = True;
             }
         } except Exception as e {
@@ -111,32 +136,37 @@ def:pub JobMatchView() -> JsxElement {
         finding = False;
     }
 
-    if loading_centers {
+    if loading_stops {
         return <div className="p-6">
             <div className="mb-6">
                 <h1 className="text-2xl font-semibold tracking-tight">Job Match</h1>
-                <p className="text-muted-foreground text-sm mt-1">Find the best-fit job for a walk-in neighbor</p>
+                <p className="text-muted-foreground text-sm mt-1">Assign a walk-in neighbor to the best open job nearby</p>
             </div>
             <Skeleton className="h-10 w-64" />
         </div>;
     }
 
     can_suggest = notes != "" and not suggesting;
-    can_find = seeker_name != "" and selected_center != "" and confirmed_category != "" and not finding;
+    can_find = seeker_name != "" and selected_stop != "" and confirmed_category != "" and not finding;
+
+    has_recommendation = has_results and ("title" in recommended);
+    origin_name = (origin["name"] as str) if "name" in origin else "";
+    origin_zone = (origin["zone"] as str) if "zone" in origin else "";
+    origin_type = (origin["stop_type"] as str) if "stop_type" in origin else "";
 
     return <div className="p-6 flex flex-col gap-6">
         <div>
             <h1 className="text-2xl font-semibold tracking-tight">Job Match</h1>
             <p className="text-muted-foreground text-sm mt-1">
-                For community-center and food-bank staff: enter a few notes about a walk-in neighbor
-                and get back the best-fit jobs nearby.
+                Employers post open jobs; community-center staff assign a walk-in neighbor to the
+                best-fit one nearby. Enter a few notes and the agent recommends the next best job.
             </p>
         </div>
 
         <Card>
             <CardHeader>
                 <CardTitle>Walk-in Intake</CardTitle>
-                <CardDescription>A caseworker fills this in with the neighbor present.</CardDescription>
+                <CardDescription>A caseworker fills this in at their community center with the neighbor present.</CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col gap-4">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -146,16 +176,20 @@ def:pub JobMatchView() -> JsxElement {
                     </Field>
                     <Field>
                         <FieldLabel htmlFor="center-select">Community Center</FieldLabel>
-                        <Select onValueChange={lambda (v: str) { selected_center = v; }}>
+                        <Select onValueChange={lambda (v: str) { selected_stop = v; }}>
                             <SelectTrigger id="center-select">
-                                <SelectValue placeholder="Select a center..." />
+                                <SelectValue placeholder="Where is the neighbor now?" />
                             </SelectTrigger>
                             <SelectContent>
                                 <SelectGroup>
-                                    {for c in centers {
-                                        c_id = c["id"] as str;
-                                        c_name = c["name"] as str;
-                                        <SelectItem key={c_id} value={c_id}>{c_name}</SelectItem>
+                                    {for s in stops {
+                                        s_id = s["id"] as str;
+                                        s_name = s["name"] as str;
+                                        s_zone = s["zone"] as str;
+                                        s_type = s["stop_type"] as str;
+                                        <SelectItem key={s_id} value={s_id}>
+                                            {s_name + " — " + cap(s_type) + " · " + cap(s_zone)}
+                                        </SelectItem>
                                     }}
                                 </SelectGroup>
                             </SelectContent>
@@ -224,58 +258,92 @@ def:pub JobMatchView() -> JsxElement {
             </div>
         }
 
-        {has_results and
-            <Card>
+        {has_recommendation and
+            <Card className="border-primary/40">
                 <CardHeader>
-                    <CardTitle>Best-fit Jobs for {seeker_name}</CardTitle>
-                    <CardDescription>Ranked by category fit, then distance from the community center.</CardDescription>
+                    <CardTitle>Next best job for {seeker_name}</CardTitle>
+                    <CardDescription>
+                        {"From " + origin_name + " (" + cap(origin_type) + " · " + cap(origin_zone) + ") — the agent's single best assignment."}
+                    </CardDescription>
                 </CardHeader>
                 <CardContent>
-                    {len(matches) == 0 and
-                        <p className="text-muted-foreground text-sm py-4 text-center">No jobs found.</p>
-                    }
-                    {len(matches) > 0 and
-                        <Table>
-                            <TableHeader>
-                                <TableRow>
-                                    <TableHead>Job</TableHead>
-                                    <TableHead>Category</TableHead>
-                                    <TableHead className="text-right">Distance</TableHead>
-                                    <TableHead className="text-right">Wage</TableHead>
-                                    <TableHead className="text-right">Fit</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {for m in matches {
-                                    m_id = m["job_id"] as str;
-                                    m_title = m["title"] as str;
-                                    m_employer = m["employer_name"] as str;
-                                    m_category = m["category"] as str;
-                                    m_dist = m["distance_km"] as float;
-                                    m_wage = m["wage_hint"] as str;
-                                    m_match = m["category_match"] as bool;
-                                    <TableRow key={m_id}>
-                                        <TableCell>
-                                            <p className="font-medium">{m_title}</p>
-                                            <p className="text-muted-foreground text-xs">{m_employer}</p>
-                                        </TableCell>
-                                        <TableCell>
-                                            <Badge variant="outline" className="text-xs">{category_label(m_category)}</Badge>
-                                        </TableCell>
-                                        <TableCell className="text-right text-sm">{f"{m_dist:.1f} km"}</TableCell>
-                                        <TableCell className="text-right text-muted-foreground text-sm">
-                                            {m_wage if m_wage != "" else "—"}
-                                        </TableCell>
-                                        <TableCell className="text-right">
-                                            {m_match and <Badge className="text-xs">Best fit</Badge> or <span></span>}
-                                        </TableCell>
-                                    </TableRow>
-                                }}
-                            </TableBody>
-                        </Table>
-                    }
+                    <div className="flex flex-col gap-3">
+                        <div className="flex items-start justify-between gap-4">
+                            <div>
+                                <p className="text-lg font-semibold">{recommended["title"] as str}</p>
+                                <p className="text-muted-foreground text-sm">{recommended["employer_name"] as str}</p>
+                            </div>
+                            {(recommended["category_match"] as bool) and <Badge>Best fit</Badge> or <span></span>}
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2">
+                            <Badge variant="outline" className="text-xs">{category_label(recommended["category"] as str)}</Badge>
+                            <Badge variant="secondary" className="text-xs">{cap(recommended["zone"] as str) + " · " + hop_label(recommended["zone_distance"] as int)}</Badge>
+                            {(recommended["wage_hint"] as str) != "" and
+                                <Badge variant="secondary" className="text-xs">{recommended["wage_hint"] as str}</Badge>
+                            }
+                        </div>
+                        {(recommended["address"] as str) != "" and
+                            <p className="text-muted-foreground text-xs">{recommended["address"] as str}</p>
+                        }
+                    </div>
                 </CardContent>
             </Card>
+        }
+
+        {has_results and len(matches) > 1 and
+            <Card>
+                <CardHeader>
+                    <CardTitle>Other open jobs</CardTitle>
+                    <CardDescription>Ranked by category fit, then center-to-center distance from {origin_name}.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <Table>
+                        <TableHeader>
+                            <TableRow>
+                                <TableHead>Job</TableHead>
+                                <TableHead>Category</TableHead>
+                                <TableHead>Route</TableHead>
+                                <TableHead className="text-right">Wage</TableHead>
+                                <TableHead className="text-right">Fit</TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {for m in matches[1:] {
+                                m_id = m["job_id"] as str;
+                                m_title = m["title"] as str;
+                                m_employer = m["employer_name"] as str;
+                                m_category = m["category"] as str;
+                                m_zone = m["zone"] as str;
+                                m_dist = m["zone_distance"] as int;
+                                m_wage = m["wage_hint"] as str;
+                                m_match = m["category_match"] as bool;
+                                <TableRow key={m_id}>
+                                    <TableCell>
+                                        <p className="font-medium">{m_title}</p>
+                                        <p className="text-muted-foreground text-xs">{m_employer}</p>
+                                    </TableCell>
+                                    <TableCell>
+                                        <Badge variant="outline" className="text-xs">{category_label(m_category)}</Badge>
+                                    </TableCell>
+                                    <TableCell className="text-sm">{cap(m_zone) + " · " + hop_label(m_dist)}</TableCell>
+                                    <TableCell className="text-right text-muted-foreground text-sm">
+                                        {m_wage if m_wage != "" else "—"}
+                                    </TableCell>
+                                    <TableCell className="text-right">
+                                        {m_match and <Badge className="text-xs">Best fit</Badge> or <span></span>}
+                                    </TableCell>
+                                </TableRow>
+                            }}
+                        </TableBody>
+                    </Table>
+                </CardContent>
+            </Card>
+        }
+
+        {has_results and len(matches) == 0 and
+            <div className="rounded-lg border border-border p-4 text-muted-foreground text-sm text-center">
+                No open jobs found.
+            </div>
         }
     </div>;
 }

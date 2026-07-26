@@ -3,8 +3,8 @@ import from services.goodmiles {
     Neighbor, ServiceStop, Trip, Seeded
 }
 import from services.jobmatch {
-    api_community_centers, api_jobs, api_suggest_category, api_create_job_seeker, api_find_best_jobs,
-    CommunityCenter, Job, JobSeeker, JobMatchSeeded
+    api_service_stops, api_jobs, api_suggest_category, api_create_job_seeker, api_find_best_jobs,
+    Job, JobSeeker, JobMatchSeeded
 }
 
 cl import ".styles.global.css";

@@ -1,5 +1,6 @@
 # Test annex for services/jobmatch.sv.jac — sees the module's declarations
-# without imports. Run with `jac test services/jobmatch.sv.jac`.
+# (including imports like ServiceStop) without imports. Run with
+# `jac test services/jobmatch.sv.jac`.
 # Note: tests share a persisted root across a run (see jac-testing) — run
 # `jac clean --all --force` first if results look stale.
 
@@ -10,45 +11,49 @@ test "keyword classifier maps notes to categories" {
     assert _classify_keyword("hotel housekeeping for three years") == JobCategory.HOSPITALITY;
 }
 
-test "haversine distance is directionally sane" {
-    d_same = calculate_distance_km(37.7749, -122.4194, 37.7749, -122.4194);
-    assert d_same < 0.001;
-
-    d_near = calculate_distance_km(37.7749, -122.4194, 37.7839, -122.4194);
-    d_far = calculate_distance_km(37.7749, -122.4194, 34.0522, -118.2437);
-    assert d_far > d_near;
+test "zone_distance grows with zone separation" {
+    assert zone_distance("north", "north") == 0;
+    assert zone_distance("north", "central") == 1;
+    assert zone_distance("north", "south") == 2;
+    assert zone_distance("north", "south") > zone_distance("north", "central");
+    assert zone_distance("north", "nowhere") == 99;
 }
 
-test "find_best_jobs ranks category match before distance, then by distance" {
-    center = root ++> CommunityCenter(
-        name="Test Center", address="1 Test St", lat=37.7749, lng=-122.4194
+test "find_best_jobs ranks category match before zone, then by zone proximity" {
+    stop = root ++> ServiceStop(
+        name="Test Stop", stop_type="jobs", zone="north", base_cost=0, bonus_on_visit=0
     );
 
-    near_match = root ++> Job(
-        title="Near Kitchen Job", employer_name="Test Co A", category=JobCategory.KITCHEN,
-        address="", lat=37.7750, lng=-122.4195, wage_hint=""
+    same_match = root ++> Job(
+        title="Same-zone Kitchen Job", employer_name="Test Co A", category=JobCategory.KITCHEN,
+        address="", zone="north", wage_hint=""
     );
     far_match = root ++> Job(
         title="Far Kitchen Job", employer_name="Test Co B", category=JobCategory.KITCHEN,
-        address="", lat=37.9000, lng=-122.6000, wage_hint=""
+        address="", zone="south", wage_hint=""
     );
-    near_nomatch = root ++> Job(
-        title="Near Warehouse Job", employer_name="Test Co C", category=JobCategory.WAREHOUSE,
-        address="", lat=37.7751, lng=-122.4196, wage_hint=""
+    same_nomatch = root ++> Job(
+        title="Same-zone Warehouse Job", employer_name="Test Co C", category=JobCategory.WAREHOUSE,
+        address="", zone="north", wage_hint=""
     );
 
     seeker = root ++> JobSeeker(name="Test Seeker", notes="kitchen experience", category=JobCategory.KITCHEN);
-    seeker +>:VISITED():+> center;
+    seeker +>:VISITED():+> stop;
 
     result = root spawn find_best_jobs(seeker_id=jid(seeker));
     assert len(result.reports) > 0;
-    matches = result.reports[0];
+    report0 = result.reports[0];
+    matches = report0["matches"];
 
-    target_ids = [jid(near_match), jid(far_match), jid(near_nomatch)];
+    target_ids = [jid(same_match), jid(far_match), jid(same_nomatch)];
     filtered = [m for m in matches if (m["job_id"] as str) in target_ids];
 
     assert len(filtered) == 3;
-    assert (filtered[0]["job_id"] as str) == jid(near_match);
+    assert (filtered[0]["job_id"] as str) == jid(same_match);
     assert (filtered[1]["job_id"] as str) == jid(far_match);
-    assert (filtered[2]["job_id"] as str) == jid(near_nomatch);
+    assert (filtered[2]["job_id"] as str) == jid(same_nomatch);
+
+    # Report also surfaces the origin center and a single recommended hop.
+    assert (report0["origin"]["name"] as str) == "Test Stop";
+    assert (report0["recommended"]["job_id"] as str) == jid(same_match);
 }
