@@ -250,17 +250,17 @@ def:pub NeighborsView() -> JsxElement {
                             <TableHead className="h-12 px-4">
                                 <span className="inline-flex items-center gap-1.5">Home Zone <HugeiconsIcon icon={UnfoldMoreIcon} strokeWidth={2} className="size-3.5 text-muted-foreground" /></span>
                             </TableHead>
-                            <TableHead className="h-12 px-4">
-                                <span className="inline-flex items-center gap-1.5">Points Balance <HugeiconsIcon icon={UnfoldMoreIcon} strokeWidth={2} className="size-3.5 text-muted-foreground" /></span>
+                            <TableHead className="h-12 w-24 px-2 text-center text-xs">
+                                <span className="inline-flex items-center justify-center gap-1 leading-tight whitespace-normal">Points Balance <HugeiconsIcon icon={UnfoldMoreIcon} strokeWidth={2} className="size-3.5 text-muted-foreground shrink-0" /></span>
                             </TableHead>
-                            <TableHead className="h-12 px-4">
-                                <span className="inline-flex items-center gap-1.5">Points Earned <HugeiconsIcon icon={UnfoldMoreIcon} strokeWidth={2} className="size-3.5 text-muted-foreground" /></span>
+                            <TableHead className="h-12 w-24 px-2 text-center text-xs">
+                                <span className="inline-flex items-center justify-center gap-1 leading-tight whitespace-normal">Points Earned <HugeiconsIcon icon={UnfoldMoreIcon} strokeWidth={2} className="size-3.5 text-muted-foreground shrink-0" /></span>
                             </TableHead>
-                            <TableHead className="h-12 px-4">
-                                <span className="inline-flex items-center gap-1.5">Points Spent <HugeiconsIcon icon={UnfoldMoreIcon} strokeWidth={2} className="size-3.5 text-muted-foreground" /></span>
+                            <TableHead className="h-12 w-24 px-2 text-center text-xs">
+                                <span className="inline-flex items-center justify-center gap-1 leading-tight whitespace-normal">Points Spent <HugeiconsIcon icon={UnfoldMoreIcon} strokeWidth={2} className="size-3.5 text-muted-foreground shrink-0" /></span>
                             </TableHead>
-                            <TableHead className="h-12 px-4">
-                                <span className="inline-flex items-center gap-1.5">Net Gained <HugeiconsIcon icon={UnfoldMoreIcon} strokeWidth={2} className="size-3.5 text-muted-foreground" /></span>
+                            <TableHead className="h-12 w-24 px-2 text-center text-xs">
+                                <span className="inline-flex items-center justify-center gap-1 leading-tight whitespace-normal">Net Gained <HugeiconsIcon icon={UnfoldMoreIcon} strokeWidth={2} className="size-3.5 text-muted-foreground shrink-0" /></span>
                             </TableHead>
                             <TableHead className="h-12 px-4">Wellbeing</TableHead>
                             <TableHead className="h-12 px-4 text-center">Actions</TableHead>
@@ -301,7 +301,7 @@ def:pub NeighborsView() -> JsxElement {
                                 progress_color = "bg-yellow-400";
                             }
                             net_gained = earned - spent;
-                            net_class = "px-4 font-medium " + ("text-emerald-600" if net_gained >= 0 else "text-rose-600");
+                            net_class = "w-24 px-2 text-center font-medium " + ("text-emerald-600" if net_gained >= 0 else "text-rose-600");
                             history = n["wellbeing_history"] as list[dict];
                             latest_feeling = "No sessions";
                             if len(history) > 0 {
@@ -325,9 +325,9 @@ def:pub NeighborsView() -> JsxElement {
                                 </TableCell>
                                 <TableCell className="px-4 font-medium">{name_str}</TableCell>
                                 <TableCell className="px-4 capitalize">{zone_str}</TableCell>
-                                <TableCell className="px-4">{str(balance)}</TableCell>
-                                <TableCell className="px-4">{str(earned)}</TableCell>
-                                <TableCell className="px-4">{str(spent)}</TableCell>
+                                <TableCell className="w-24 px-2 text-center">{str(balance)}</TableCell>
+                                <TableCell className="w-24 px-2 text-center">{str(earned)}</TableCell>
+                                <TableCell className="w-24 px-2 text-center">{str(spent)}</TableCell>
                                 <TableCell className={net_class}>{("+" if net_gained > 0 else "") + str(net_gained)}</TableCell>
                                 <TableCell className="px-4">
                                     <Button
