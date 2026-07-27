@@ -1,5 +1,3 @@
-cl import from "react-router-dom" { NavLink }
-
 def:pub LandingView() -> JsxElement {
     return <div className="min-h-full overflow-hidden bg-[#f7f7f2] text-[#17362a]">
         <section className="relative px-6 py-8 lg:px-12 lg:py-12">
@@ -14,12 +12,12 @@ def:pub LandingView() -> JsxElement {
                         <p className="mt-1 text-[11px] text-[#547064]">Mobility for good</p>
                     </div>
                 </div>
-                <NavLink
-                    to="/pathway"
+                <a
+                    href="/pathway"
                     className="rounded-full border border-[#17362a]/15 bg-white/80 px-5 py-2.5 text-sm font-semibold shadow-sm backdrop-blur transition-transform hover:-translate-y-0.5"
                 >
                     Open dashboard
-                </NavLink>
+                </a>
             </nav>
 
             <div className="relative mx-auto grid max-w-7xl grid-cols-1 items-center gap-14 py-20 lg:grid-cols-[1.05fr_0.95fr] lg:py-28">
@@ -36,13 +34,13 @@ def:pub LandingView() -> JsxElement {
                         to food, health, counseling, coaching, and employment support.
                     </p>
                     <div className="mt-9 flex flex-wrap items-center gap-4">
-                        <NavLink
-                            to="/pathway"
+                        <a
+                            href="/neighbors"
                             className="group inline-flex items-center gap-3 rounded-full bg-[#17362a] px-7 py-4 text-base font-semibold text-white shadow-[0_18px_45px_rgba(23,54,42,0.22)] transition-all hover:-translate-y-1 hover:bg-[#214c3b]"
                         >
                             Start here
                             <span className="transition-transform group-hover:translate-x-1">→</span>
-                        </NavLink>
+                        </a>
                         <p className="text-sm text-[#6d8279]">From conversation to a coordinated ride in one flow.</p>
                     </div>
                 </div>
@@ -118,9 +116,9 @@ def:pub LandingView() -> JsxElement {
                     <p className="text-xs font-bold uppercase tracking-[0.2em] text-[#49633e]">One conversation. One pathway.</p>
                     <h2 className="mt-3 max-w-2xl text-3xl font-semibold tracking-[-0.035em] sm:text-4xl">See how private consultation becomes coordinated care.</h2>
                 </div>
-                <NavLink to="/pathway" className="shrink-0 rounded-full bg-[#17362a] px-7 py-4 font-semibold text-white shadow-xl transition-transform hover:-translate-y-1">
+                <a href="/neighbors" className="shrink-0 rounded-full bg-[#17362a] px-7 py-4 font-semibold text-white shadow-xl transition-transform hover:-translate-y-1">
                     Start here →
-                </NavLink>
+                </a>
             </div>
         </section>
     </div>;
