@@ -10,7 +10,7 @@ import from "@hugeicons/core-free-icons" {
     Delete02Icon,
     UnfoldMoreIcon
 }
-sv import from "..services.goodmiles" { api_neighbors, api_add_neighbor, api_delete_neighbor, api_update_neighbor, api_update_trip_notes }
+sv import from "..services.goodmiles" { api_neighbors, api_add_neighbor, api_delete_neighbor, api_update_neighbor, api_review_transition, api_update_trip_notes }
 
 def:pub NeighborsView() -> JsxElement {
     has neighbors: list[dict] = [];
@@ -37,6 +37,7 @@ def:pub NeighborsView() -> JsxElement {
     has saved_note_id: str = "";
     has saved_note_at: str = "";
     has note_error: str = "";
+    has reviewing_id: str = "";
 
     async can with entry {
         try {
@@ -149,6 +150,24 @@ def:pub NeighborsView() -> JsxElement {
         editing_person = False;
     }
 
+    async def review_transition(person_id: str, approved: bool) -> None {
+        reviewing_id = person_id;
+        error = "";
+        try {
+            data: any = await api_review_transition(person_id, approved);
+            result = data as dict;
+            if "error" in result {
+                error = result["error"] as str;
+            } else {
+                refreshed: any = await api_neighbors();
+                neighbors = refreshed as list[dict];
+            }
+        } except Exception as ex {
+            error = str(ex);
+        }
+        reviewing_id = "";
+    }
+
     def open_wellbeing(person_name: str, history: list[dict]) {
         wellbeing_person = person_name;
         wellbeing_history = history;
@@ -227,17 +246,22 @@ def:pub NeighborsView() -> JsxElement {
     visible_neighbors: list[dict] = [];
     not_started_count = 0;
     in_progress_count = 0;
-    completed_count = 0;
+    review_count = 0;
+    transition_ready_count = 0;
     query = search.lower();
     for n in neighbors {
         person_name = n["name"] as str;
         person_zone = n["home_zone"] as str;
         person_balance = n["points_balance"] as int;
+        person_transition_status = n["transition_status"] as str;
         if person_balance <= 50 {
             not_started_count = not_started_count + 1;
         }
-        elif person_balance >= 150 {
-            completed_count = completed_count + 1;
+        elif person_transition_status == "transition_ready" {
+            transition_ready_count = transition_ready_count + 1;
+        }
+        elif person_transition_status == "ready_for_review" {
+            review_count = review_count + 1;
         }
         else {
             in_progress_count = in_progress_count + 1;
@@ -292,7 +316,7 @@ def:pub NeighborsView() -> JsxElement {
         </div>
 
         {not loading and error == "" and
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 mb-6">
                 <div className="rounded-xl border border-amber-300 bg-amber-100 p-4">
                     <div className="flex items-center justify-between">
                         <div>
@@ -311,13 +335,22 @@ def:pub NeighborsView() -> JsxElement {
                         <span className="text-2xl font-semibold text-lime-700">{str(in_progress_count)}</span>
                     </div>
                 </div>
+                <div className="rounded-xl border border-yellow-300 bg-yellow-100 p-4">
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <p className="text-sm font-medium text-yellow-900">Final review</p>
+                            <p className="text-xs text-yellow-700 mt-1">150+ points · human approval</p>
+                        </div>
+                        <span className="text-2xl font-semibold text-yellow-700">{str(review_count)}</span>
+                    </div>
+                </div>
                 <div className="rounded-xl border border-emerald-300 bg-emerald-100 p-4">
                     <div className="flex items-center justify-between">
                         <div>
-                            <p className="text-sm font-medium text-emerald-900">Completed</p>
-                            <p className="text-xs text-emerald-700 mt-1">150 points or more</p>
+                            <p className="text-sm font-medium text-emerald-900">Transition Ready</p>
+                            <p className="text-xs text-emerald-700 mt-1">Approved by staff</p>
                         </div>
-                        <span className="text-2xl font-semibold text-emerald-700">{str(completed_count)}</span>
+                        <span className="text-2xl font-semibold text-emerald-700">{str(transition_ready_count)}</span>
                     </div>
                 </div>
             </div>
@@ -379,7 +412,8 @@ def:pub NeighborsView() -> JsxElement {
                             earned = n["points_earned"] as int;
                             spent = n["points_spent"] as int;
                             progress = n["upskill_progress"] as int;
-                            progress_label = "Not started" if balance <= 50 else ("Completed" if balance >= 150 else "In progress");
+                            transition_status = n["transition_status"] as str;
+                            progress_label = "Not started" if balance <= 50 else ("Transition Ready" if transition_status == "transition_ready" else ("Ready for review" if transition_status == "ready_for_review" else "In progress"));
                             progress_detail = str(balance) + " current points";
                             progress_color = "bg-amber-300";
                             if progress >= 75 {
@@ -446,6 +480,25 @@ def:pub NeighborsView() -> JsxElement {
                                         >
                                             <HugeiconsIcon icon={Delete02Icon} strokeWidth={2} className="size-4" />
                                         </Button>
+                                        {transition_status == "ready_for_review" and
+                                            <Button
+                                                size="sm"
+                                                disabled={reviewing_id != ""}
+                                                onClick={lambda { review_transition(id_str, True); }}
+                                            >
+                                                {("Approving..." if reviewing_id == id_str else "Approve")}
+                                            </Button>
+                                        }
+                                        {transition_status == "transition_ready" and
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                disabled={reviewing_id != ""}
+                                                onClick={lambda { review_transition(id_str, False); }}
+                                            >
+                                                Reopen
+                                            </Button>
+                                        }
                                     </div>
                                 </TableCell>
                             </TableRow>

@@ -1,4 +1,22 @@
-# Empty
+# GoodMiles
+
+GoodMiles coordinates private in-car consultations, transition-support
+locations, points-based participation, and human-reviewed readiness pathways.
+
+## Gemini interpretation
+
+Pathway uses Gemini 2.5 Flash structured output to interpret private avatar
+consultation transcripts. Before starting the app, set the key in the shell
+that launches Jac:
+
+```bash
+export GEMINI_API_KEY="your_google_ai_studio_api_key"
+jac start --dev main.jac
+```
+
+The MVP intentionally retains raw demo transcripts so staff can compare the
+source conversation with Gemini's consent-scoped interpretation. A production
+deployment should delete raw transcripts after successful extraction.
 
 A blank canvas — the minimal jac-shadcn starter the other templates are built on.
 

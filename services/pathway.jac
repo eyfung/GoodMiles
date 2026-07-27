@@ -8,14 +8,16 @@
 #   3) keeps every request's pathway so the whole fleet can be shown on one map,
 #   4) recommends the participant's most useful next service/ride.
 #
-# Grounded in real app data: destinations are actual ServiceStops, imported
-# read-only from services/goodmiles.jac. This module never mutates
-# Neighbor / ServiceStop / Trip.
+# Locations are owned by Pathway. Completed visits write their point impact
+# back to the participant record and create a visible history entry.
 
 import os;
 import math;
+import json;
+import urllib.request;
+import from datetime { datetime }
 
-import from services.goodmiles { ServiceStop, get_all_stops, seed_demo_data }
+import from services.goodmiles { Neighbor, Trip, get_all_neighbors, get_neighbor, seed_demo_data }
 
 glob AV_SPEED_MPH: float = 25.0;
 
@@ -55,9 +57,32 @@ node RideRequest {
     has next_service: dict = {};
     has transcript: str = "";
     has interpretation: dict = {};
+    has location_id: str = "";
+    has visit_cost: int = 0;
+    has points_reward: int = 0;
+    has upskill_category: str = "";
+    has completed: bool = False;
+}
+
+node PathwayLocation {
+    has location_id: str;
+    has name: str;
+    has service_type: str;
+    has category: str;
+    has zone: str;
+    has lat: float;
+    has lng: float;
+    has visit_cost: int;
+    has points_reward: int;
+    has capacity_total: int;
+    has capacity_used: int = 0;
 }
 
 node FleetSeeded {
+    has done: bool = True;
+}
+
+node CatalogSeeded {
     has done: bool = True;
 }
 
@@ -77,27 +102,28 @@ def seed_fleet_data {
     root ++> AV(name="AV-04", seats_total=3, lat=37.7800, lng=-122.4120, zone="north");
 }
 
+def seed_location_catalog {
+    existing = [root-->][?:CatalogSeeded];
+    if len(existing) > 0 {
+        return;
+    }
+    root ++> CatalogSeeded();
+    root ++> PathwayLocation(location_id="river-pantry", name="River Pantry", service_type="food", category="Stability", zone="north", lat=37.7749, lng=-122.4194, visit_cost=5, points_reward=20, capacity_total=18);
+    root ++> PathwayLocation(location_id="career-hub", name="Career Hub", service_type="coaching", category="Career skills", zone="north", lat=37.7880, lng=-122.4074, visit_cost=5, points_reward=25, capacity_total=12);
+    root ++> PathwayLocation(location_id="wellness-center", name="Wellness Center", service_type="counseling", category="Wellbeing", zone="central", lat=37.7599, lng=-122.4148, visit_cost=5, points_reward=20, capacity_total=10);
+    root ++> PathwayLocation(location_id="community-health", name="Community Health", service_type="health", category="Health readiness", zone="south", lat=37.7300, lng=-122.3850, visit_cost=10, points_reward=25, capacity_total=14);
+    root ++> PathwayLocation(location_id="jobs-office", name="Jobs Office", service_type="employment", category="Employment readiness", zone="south", lat=37.7320, lng=-122.3890, visit_cost=5, points_reward=30, capacity_total=16);
+    root ++> PathwayLocation(location_id="digital-learning-lab", name="Digital Learning Lab", service_type="education", category="Digital skills", zone="central", lat=37.7665, lng=-122.4172, visit_cost=5, points_reward=25, capacity_total=20);
+    root ++> PathwayLocation(location_id="community-kitchen", name="Community Kitchen", service_type="community", category="Community contribution", zone="north", lat=37.7812, lng=-122.4104, visit_cost=5, points_reward=30, capacity_total=15);
+}
+
 # ========================================
 # Geometry + reference data
 # ========================================
 
-def center_coord(stop: ServiceStop) -> dict {
-    known = {
-        "River Pantry": {"lat": 37.7749, "lng": -122.4194},
-        "Career Hub": {"lat": 37.7880, "lng": -122.4074},
-        "Wellness Center": {"lat": 37.7599, "lng": -122.4148},
-        "Community Health": {"lat": 37.7300, "lng": -122.3850},
-        "Jobs Office": {"lat": 37.7320, "lng": -122.3890},
-    };
-    if stop.name in known {
-        return known[stop.name];
-    }
-    centroid = {
-        "north": {"lat": 37.7850, "lng": -122.4110},
-        "central": {"lat": 37.7600, "lng": -122.4180},
-        "south": {"lat": 37.7300, "lng": -122.3880},
-    };
-    return centroid.get(stop.zone, {"lat": 37.7749, "lng": -122.4194});
+def get_all_locations() -> list[PathwayLocation] {
+    seed_location_catalog();
+    return [root-->][?:PathwayLocation];
 }
 
 def calculate_distance_miles(lat1: float, lng1: float, lat2: float, lng2: float) -> float {
@@ -212,23 +238,26 @@ def _consultation_scenarios() -> list[dict] {
 def _service_label(stop_type: str) -> str {
     m = {
         "pantry": "Food Pantry", "coaching": "Job Coaching", "counseling": "Counseling",
-        "health": "Medical Clinic", "jobs": "Employment Services"
+        "health": "Medical Clinic", "employment": "Employment Services",
+        "education": "Digital Learning", "community": "Community Contribution"
     };
     return m.get(stop_type, stop_type);
 }
 
 def _next_type(stop_type: str) -> str {
     m = {
-        "pantry": "health", "coaching": "jobs", "jobs": "counseling",
-        "health": "pantry", "counseling": "coaching"
+        "food": "health", "coaching": "employment", "employment": "counseling",
+        "health": "food", "counseling": "coaching", "education": "employment",
+        "community": "coaching"
     };
-    return m.get(stop_type, "pantry");
+    return m.get(stop_type, "food");
 }
 
-def get_service_stop(id: str) -> ServiceStop | None {
-    node_obj = jobj(id);
-    if isinstance(node_obj, ServiceStop) {
-        return node_obj;
+def get_location(id: str) -> PathwayLocation | None {
+    for location in get_all_locations() {
+        if location.location_id == id or jid(location) == id {
+            return location;
+        }
     }
     return None;
 }
@@ -236,15 +265,14 @@ def get_service_stop(id: str) -> ServiceStop | None {
 def _nearest_stop_of_type(stop_type: str, from_lat: float, from_lng: float, exclude_id: str) -> dict {
     best: dict = {};
     best_d = 999999.0;
-    for s in get_all_stops() {
-        if s.stop_type == stop_type and jid(s) != exclude_id {
-            c = center_coord(s);
-            d = calculate_distance_miles(from_lat, from_lng, c["lat"], c["lng"]);
+    for location in get_all_locations() {
+        if location.service_type == stop_type and location.location_id != exclude_id {
+            d = calculate_distance_miles(from_lat, from_lng, location.lat, location.lng);
             if d < best_d {
                 best_d = d;
                 best = {
-                    "id": jid(s), "name": s.name, "service": _service_label(s.stop_type),
-                    "lat": c["lat"], "lng": c["lng"], "distance_miles": round(d, 1)
+                    "id": location.location_id, "name": location.name, "service": _service_label(location.service_type),
+                    "lat": location.lat, "lng": location.lng, "distance_miles": round(d, 1)
                 };
             }
         }
@@ -289,7 +317,12 @@ def _req_dict(r: RideRequest) -> dict {
         "av_name": r.av_name, "distance_miles": r.distance_miles, "eta_min": r.eta_min,
         "status": r.status, "route": r.route, "decision": r.decision, "next_service": r.next_service,
         "transcript": getattr(r, "transcript", ""),
-        "interpretation": getattr(r, "interpretation", {})
+        "interpretation": getattr(r, "interpretation", {}),
+        "location_id": getattr(r, "location_id", ""),
+        "visit_cost": getattr(r, "visit_cost", 0),
+        "points_reward": getattr(r, "points_reward", 0),
+        "upskill_category": getattr(r, "upskill_category", ""),
+        "completed": getattr(r, "completed", False)
     };
 }
 
@@ -325,14 +358,139 @@ def _serialize_state(current: RideRequest | None) -> dict {
 
 def _destinations_list() -> list {
     out: list = [];
-    for s in get_all_stops() {
-        c = center_coord(s);
+    for location in get_all_locations() {
         out = out + [{
-            "id": jid(s), "name": s.name, "stop_type": s.stop_type,
-            "service": _service_label(s.stop_type), "lat": c["lat"], "lng": c["lng"], "zone": s.zone
+            "id": location.location_id, "name": location.name, "stop_type": location.service_type,
+            "service": _service_label(location.service_type), "category": location.category,
+            "lat": location.lat, "lng": location.lng, "zone": location.zone,
+            "visit_cost": location.visit_cost, "points_reward": location.points_reward,
+            "net_points": location.points_reward - location.visit_cost,
+            "capacity_total": location.capacity_total,
+            "capacity_used": location.capacity_used,
+            "capacity_free": location.capacity_total - location.capacity_used
         }];
     }
     return out;
+}
+
+def _preset_demo_interpretation(scenario_id: str) -> dict {
+    selected: dict = {};
+    for scenario in _consultation_scenarios() {
+        if (scenario["id"] as str) == scenario_id {
+            selected = scenario;
+        }
+    }
+    if len(selected) == 0 {
+        return {"error": "Preset interpretation is unavailable"};
+    }
+    location_ids = {
+        "River Pantry": "river-pantry",
+        "Career Hub": "career-hub",
+        "Wellness Center": "wellness-center",
+        "Community Health": "community-health",
+        "Jobs Office": "jobs-office"
+    };
+    pickup_zones = {
+        "Tenderloin SRO": "north",
+        "Mission Homes": "central",
+        "Sunnydale Apartments": "south",
+        "Bayview Blocks": "south"
+    };
+    destination_name = selected["destination_name"] as str;
+    pickup_name = selected["pickup_name"] as str;
+    return {
+        "agent": "Preset demo interpretation",
+        "participant": selected["participant"],
+        "primary_need": selected["need"],
+        "urgency": selected["urgency"],
+        "availability": selected["availability"],
+        "pickup_name": pickup_name,
+        "home_zone": pickup_zones[pickup_name],
+        "has_car": selected["has_car"],
+        "wellbeing_signal": selected["wellbeing"],
+        "summary": selected["summary"],
+        "evidence": selected["evidence"],
+        "safety_flags": selected["safety_flags"],
+        "recommended_location_id": location_ids[destination_name],
+        "allocation_reason": "Preset MVP routing matches the participant's stated primary need to the approved location catalogue.",
+        "consent_scope": "Use consultation details only for service coordination and safe transportation",
+        "raw_transcript_retained": True
+    };
+}
+
+def _gemini_interpret_transcript(transcript: str) -> dict {
+    api_key = os.getenv("GEMINI_API_KEY", "");
+    if api_key == "" {
+        return {
+            "error": "Gemini is not configured. Set GEMINI_API_KEY and restart the server.",
+            "code": "gemini_not_configured"
+        };
+    }
+
+    catalog_context: list[dict] = [];
+    for location in get_all_locations() {
+        catalog_context = catalog_context + [{
+            "location_id": location.location_id,
+            "name": location.name,
+            "service_type": location.service_type,
+            "category": location.category,
+            "zone": location.zone,
+            "visit_cost": location.visit_cost,
+            "points_reward": location.points_reward,
+            "capacity_free": location.capacity_total - location.capacity_used
+        }];
+    }
+
+    prompt = "You are the GoodMiles Pathway Consultation Interpreter. Extract only facts supported by the private in-car consultation transcript. Do not diagnose, invent details, or treat points as proof of human worth. Recommend exactly one available catalogue location that best addresses the participant's stated need. Flag urgent safety concerns for human follow-up. The transcript is retained only because this is an MVP demo.\n\nPICKUP OPTIONS:\n" + json.dumps(_pickup_points()) + "\n\nLOCATION CATALOGUE:\n" + json.dumps(catalog_context) + "\n\nTRANSCRIPT:\n" + transcript;
+    schema = {
+        "type": "object",
+        "properties": {
+            "participant": {"type": "string"},
+            "primary_need": {"type": "string", "enum": ["food", "coaching", "health", "counseling", "employment", "education", "community"]},
+            "urgency": {"type": "string", "enum": ["low", "medium", "high"]},
+            "availability": {"type": "string", "enum": ["now", "morning", "afternoon"]},
+            "pickup_name": {"type": "string"},
+            "home_zone": {"type": "string", "enum": ["north", "central", "south"]},
+            "has_car": {"type": "boolean"},
+            "wellbeing_signal": {"type": "string"},
+            "summary": {"type": "string"},
+            "evidence": {"type": "array", "items": {"type": "string"}, "minItems": 1, "maxItems": 5},
+            "safety_flags": {"type": "array", "items": {"type": "string"}, "maxItems": 5},
+            "recommended_location_id": {"type": "string"},
+            "allocation_reason": {"type": "string"}
+        },
+        "required": [
+            "participant", "primary_need", "urgency", "availability", "pickup_name",
+            "home_zone", "has_car", "wellbeing_signal", "summary", "evidence",
+            "safety_flags", "recommended_location_id", "allocation_reason"
+        ],
+        "additionalProperties": False
+    };
+    request_body = {
+        "contents": [{"parts": [{"text": prompt}]}],
+        "generationConfig": {
+            "responseMimeType": "application/json",
+            "responseSchema": schema
+        }
+    };
+    try {
+        request = urllib.request.Request(
+            "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
+            data=json.dumps(request_body).encode("utf-8"),
+            headers={"x-goog-api-key": api_key, "Content-Type": "application/json"},
+            method="POST"
+        );
+        response = urllib.request.urlopen(request, timeout=45);
+        response_data = json.loads(response.read().decode("utf-8"));
+        output_text = response_data["candidates"][0]["content"]["parts"][0]["text"];
+        interpreted = json.loads(output_text);
+        interpreted["agent"] = "Gemini 2.5 Flash";
+        interpreted["consent_scope"] = "Use consultation details only for service coordination and safe transportation";
+        interpreted["raw_transcript_retained"] = True;
+        return interpreted;
+    } except Exception as e {
+        return {"error": "Gemini interpretation failed: " + str(e), "code": "gemini_request_failed"};
+    }
 }
 
 # ========================================
@@ -360,19 +518,23 @@ def:pub api_request_ride(
     pickup_name: str, pickup_lat: float, pickup_lng: float, dest_id: str,
     transcript: str = "", interpretation: dict = {}
 ) -> dict {
-    stop = get_service_stop(dest_id);
-    if stop == None {
+    location = get_location(dest_id);
+    if location == None {
         return {"error": "Destination not found"};
     }
-    dc = center_coord(stop);
-    dest_lat = dc["lat"];
-    dest_lng = dc["lng"];
+    if location.capacity_used >= location.capacity_total {
+        return {"error": "Selected location is currently at capacity"};
+    }
+    dest_lat = location.lat;
+    dest_lng = location.lng;
 
     req = root ++> RideRequest(
         participant=name, note=note, availability=availability, has_car=has_car, need=need,
         pickup_name=pickup_name, pickup_lat=pickup_lat, pickup_lng=pickup_lng,
-        dest_name=stop.name, dest_type=stop.stop_type, dest_lat=dest_lat, dest_lng=dest_lng,
-        transcript=transcript, interpretation=interpretation
+        dest_name=location.name, dest_type=location.service_type, dest_lat=dest_lat, dest_lng=dest_lng,
+        transcript=transcript, interpretation=interpretation, location_id=location.location_id,
+        visit_cost=location.visit_cost, points_reward=location.points_reward,
+        upskill_category=location.category
     );
 
     rider_miles = calculate_distance_miles(pickup_lat, pickup_lng, dest_lat, dest_lng);
@@ -405,10 +567,11 @@ def:pub api_request_ride(
         }
     }
 
-    nt = _next_type(stop.stop_type);
-    rec = _nearest_stop_of_type(nt, dest_lat, dest_lng, jid(stop));
+    location.capacity_used = location.capacity_used + 1;
+    nt = _next_type(location.service_type);
+    rec = _nearest_stop_of_type(nt, dest_lat, dest_lng, location.location_id);
     if len(rec) > 0 {
-        rec["reason"] = "After " + _service_label(stop.stop_type) + ", a common next step is " + _service_label(nt) + " — nearest is " + (rec["name"] as str) + ".";
+        rec["reason"] = "After " + _service_label(location.service_type) + ", a common next step is " + _service_label(nt) + " — nearest is " + (rec["name"] as str) + ".";
     }
     req.next_service = rec;
 
@@ -416,65 +579,75 @@ def:pub api_request_ride(
 }
 
 def:pub api_ingest_consultation(scenario_id: str, transcript: str) -> dict {
-    selected: dict = {};
+    scenario_exists = False;
     for scenario in _consultation_scenarios() {
         if (scenario["id"] as str) == scenario_id {
-            selected = scenario;
+            scenario_exists = True;
         }
     }
-    if len(selected) == 0 {
+    if not scenario_exists {
         return {"error": "Consultation scenario not found"};
     }
     if transcript.strip() == "" {
         return {"error": "Transcript is required"};
     }
 
-    pickup_name = selected["pickup_name"] as str;
+    if os.getenv("GEMINI_API_KEY", "") == "" {
+        interpretation = _preset_demo_interpretation(scenario_id);
+    } else {
+        interpretation = _gemini_interpret_transcript(transcript);
+    }
+    if "error" in interpretation {
+        return interpretation;
+    }
+
+    pickup_name = interpretation["pickup_name"] as str;
     pickup_lat = 0.0;
     pickup_lng = 0.0;
+    pickup_found = False;
     for pp in _pickup_points() {
         if (pp["name"] as str) == pickup_name {
             pickup_lat = pp["lat"] as float;
             pickup_lng = pp["lng"] as float;
+            pickup_found = True;
         }
     }
-
-    destination_name = selected["destination_name"] as str;
-    destination_id = "";
-    destination_type = "";
-    for stop in get_all_stops() {
-        if stop.name == destination_name {
-            destination_id = jid(stop);
-            destination_type = stop.stop_type;
-        }
-    }
-    if destination_id == "" {
-        return {"error": "Recommended service is unavailable"};
+    if not pickup_found {
+        return {"error": "Gemini returned an unknown pickup location", "code": "invalid_gemini_output"};
     }
 
-    interpretation = {
-        "agent": "Pathway Consultation Interpreter",
-        "participant": selected["participant"],
-        "primary_need": selected["need"],
-        "urgency": selected["urgency"],
-        "availability": selected["availability"],
-        "transportation_barrier": "No personal vehicle" if not (selected["has_car"] as bool) else "Self-transport available",
-        "pickup_name": pickup_name,
-        "recommended_service": destination_name,
-        "recommended_service_type": destination_type,
-        "wellbeing_signal": selected["wellbeing"],
-        "summary": selected["summary"],
-        "evidence": selected["evidence"],
-        "safety_flags": selected["safety_flags"],
-        "consent_scope": "Use consultation details only for service coordination and safe transportation"
-    };
+    destination_id = interpretation["recommended_location_id"] as str;
+    destination = get_location(destination_id);
+    if destination == None {
+        return {"error": "Gemini returned a location outside the approved catalogue", "code": "invalid_gemini_output"};
+    }
+
+    participant_name = interpretation["participant"] as str;
+    participant = get_neighbor(participant_name);
+    if participant == None {
+        participant = root ++> Neighbor(
+            name=participant_name,
+            points_balance=50,
+            home_zone=interpretation["home_zone"] as str,
+            points_initialized=True
+        );
+    }
+
+    interpretation["transportation_barrier"] = "No personal vehicle" if not (interpretation["has_car"] as bool) else "Self-transport available";
+    interpretation["recommended_service"] = destination.name;
+    interpretation["recommended_service_type"] = destination.service_type;
+    interpretation["recommended_location_category"] = destination.category;
+    interpretation["visit_cost"] = destination.visit_cost;
+    interpretation["points_reward"] = destination.points_reward;
+    interpretation["net_points"] = destination.points_reward - destination.visit_cost;
+    interpretation["starting_balance"] = participant.points_balance;
 
     state = api_request_ride(
-        selected["participant"] as str,
-        selected["summary"] as str,
-        selected["availability"] as str,
-        selected["has_car"] as bool,
-        selected["need"] as str,
+        participant_name,
+        interpretation["summary"] as str,
+        interpretation["availability"] as str,
+        interpretation["has_car"] as bool,
+        interpretation["primary_need"] as str,
         pickup_name,
         pickup_lat,
         pickup_lng,
@@ -484,7 +657,76 @@ def:pub api_ingest_consultation(scenario_id: str, transcript: str) -> dict {
     );
     state["interpretation"] = interpretation;
     state["ingested_transcript"] = transcript;
+    state["gemini_model"] = interpretation["agent"];
     return state;
+}
+
+def:pub api_complete_pathway_visit(request_id: str) -> dict {
+    target: RideRequest | None = None;
+    for request in [root-->][?:RideRequest] {
+        if jid(request) == request_id {
+            target = request;
+        }
+    }
+    if target == None {
+        return {"error": "Pathway request not found"};
+    }
+    if getattr(target, "completed", False) {
+        return {"error": "This visit has already been completed"};
+    }
+
+    participant = get_neighbor(target.participant);
+    if participant == None {
+        return {"error": "Participant is not enrolled in the points program"};
+    }
+    if participant.points_balance < target.visit_cost {
+        return {"error": "Participant does not have enough points for this visit"};
+    }
+
+    participant.points_balance = participant.points_balance - target.visit_cost + target.points_reward;
+    participant.points_spent = participant.points_spent + target.visit_cost;
+    participant.points_earned = participant.points_earned + target.points_reward;
+    target.completed = True;
+    target.status = "completed";
+
+    location = get_location(target.location_id);
+    if isinstance(location, PathwayLocation) and location.capacity_used > 0 {
+        location.capacity_used = location.capacity_used - 1;
+    }
+    if target.av_name != "" {
+        for vehicle in [root-->][?:AV] {
+            if vehicle.name == target.av_name and vehicle.seats_used > 0 {
+                vehicle.seats_used = vehicle.seats_used - 1;
+                if vehicle.seats_used == 0 {
+                    vehicle.status = "idle";
+                }
+            }
+        }
+    }
+
+    completed_at = datetime.now().strftime("%m/%d/%Y %H:%M");
+    root ++> Trip(
+        trip_id=target.participant + "-" + target.location_id + "-" + completed_at,
+        neighbor_name=target.participant,
+        stop_name=target.dest_name,
+        cost=target.visit_cost,
+        bonus=target.points_reward,
+        feeling="Not recorded",
+        notes=target.note,
+        notes_saved_at=completed_at
+    );
+
+    return {
+        "status": "completed",
+        "request_id": request_id,
+        "participant": participant.name,
+        "visit_cost": target.visit_cost,
+        "points_reward": target.points_reward,
+        "net_points": target.points_reward - target.visit_cost,
+        "new_balance": participant.points_balance,
+        "transition_status": "ready_for_review" if participant.points_balance >= 150 else "in_progress",
+        "state": _serialize_state(target)
+    };
 }
 
 def:pub api_reset_fleet() -> dict {
@@ -495,6 +737,9 @@ def:pub api_reset_fleet() -> dict {
         v.seats_used = 0;
         v.status = "idle";
     }
+    for location in get_all_locations() {
+        location.capacity_used = 0;
+    }
     return _serialize_state(None);
 }
 
@@ -504,4 +749,5 @@ def:pub api_reset_fleet() -> dict {
 
 with entry {
     seed_fleet_data();
+    seed_location_catalog();
 }

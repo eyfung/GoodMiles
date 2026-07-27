@@ -10,7 +10,7 @@ import from ".ui.skeleton" { Skeleton }
 import from ".ui.spinner" { Spinner }
 cl import from "react-leaflet" { MapContainer, TileLayer, CircleMarker, Polyline, Popup }
 sv import from "..services.pathway" {
-    api_fleet_state, api_ingest_consultation, api_reset_fleet
+    api_fleet_state, api_ingest_consultation, api_complete_pathway_visit, api_reset_fleet
 }
 
 def av_color(status: str) -> str {
@@ -40,6 +40,9 @@ def status_badge(status: str) -> JsxElement {
     if status == "queued" {
         return <Badge variant="destructive" className="text-xs">Queued</Badge>;
     }
+    if status == "completed" {
+        return <Badge className="bg-emerald-600 text-xs text-white">Completed</Badge>;
+    }
     return <Badge variant="outline" className="text-xs">{status}</Badge>;
 }
 
@@ -58,6 +61,9 @@ def:pub PathwayView() -> JsxElement {
     has has_interpretation: bool = False;
 
     has requesting: bool = False;
+    has completing: bool = False;
+    has completion: dict = {};
+    has has_completion: bool = False;
     has current: dict = {};
     has has_current: bool = False;
     has error: str = "";
@@ -93,6 +99,8 @@ def:pub PathwayView() -> JsxElement {
         interpretation = {};
         has_interpretation = False;
         has_current = False;
+        completion = {};
+        has_completion = False;
         for scenario in scenarios {
             if (scenario["id"] as str) == selected_id {
                 transcript = scenario["transcript"] as str;
@@ -135,10 +143,36 @@ def:pub PathwayView() -> JsxElement {
             current = {};
             interpretation = {};
             has_interpretation = False;
+            completion = {};
+            has_completion = False;
         } except Exception as e {
             error = str(e);
         }
         requesting = False;
+    }
+
+    async def handle_complete_visit() -> None {
+        if not has_current {
+            return;
+        }
+        completing = True;
+        error = "";
+        try {
+            data: any = await api_complete_pathway_visit(current["id"] as str);
+            result = data as dict;
+            if "error" in result {
+                error = result["error"] as str;
+            } else {
+                completion = result;
+                has_completion = True;
+                state = result["state"] as dict;
+                _apply_state(state);
+                current = state["current"] as dict;
+            }
+        } except Exception as e {
+            error = str(e);
+        }
+        completing = False;
     }
 
     if loading {
@@ -178,6 +212,44 @@ def:pub PathwayView() -> JsxElement {
             </div>
         </div>
 
+        <Card>
+            <CardHeader>
+                <div className="flex items-start justify-between gap-4">
+                    <div>
+                        <CardTitle>Location catalogue</CardTitle>
+                        <CardDescription>Approved destinations where points fund access and participation builds transition readiness.</CardDescription>
+                    </div>
+                    <Badge variant="secondary" className="text-xs">50 start · 150 final review</Badge>
+                </div>
+            </CardHeader>
+            <CardContent>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                    {for destination in destinations {
+                        destination_id = destination["id"] as str;
+                        destination_name = destination["name"] as str;
+                        destination_category = destination["category"] as str;
+                        destination_cost = destination["visit_cost"] as int;
+                        destination_reward = destination["points_reward"] as int;
+                        destination_free = destination["capacity_free"] as int;
+                        destination_total = destination["capacity_total"] as int;
+                        <div key={destination_id} className="rounded-xl border border-border bg-background p-4">
+                            <div className="flex items-start justify-between gap-3">
+                                <div>
+                                    <p className="font-semibold">{destination_name}</p>
+                                    <p className="mt-1 text-xs text-muted-foreground">{destination_category}</p>
+                                </div>
+                                <Badge variant="outline" className="text-[10px]">{str(destination_free) + "/" + str(destination_total)}</Badge>
+                            </div>
+                            <div className="mt-4 flex items-center gap-2 text-xs">
+                                <span className="rounded-full bg-rose-50 px-2.5 py-1 font-semibold text-rose-700">{"−" + str(destination_cost) + " cost"}</span>
+                                <span className="rounded-full bg-emerald-50 px-2.5 py-1 font-semibold text-emerald-700">{"+" + str(destination_reward) + " earned"}</span>
+                            </div>
+                        </div>
+                    }}
+                </div>
+            </CardContent>
+        </Card>
+
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <Card className="lg:col-span-1">
                 <CardHeader>
@@ -207,7 +279,7 @@ def:pub PathwayView() -> JsxElement {
                     <Field>
                         <div className="flex items-center justify-between gap-2">
                             <FieldLabel htmlFor="transcript">Raw avatar transcript</FieldLabel>
-                            <Badge variant="outline" className="text-[10px]">Ingested input</Badge>
+                            <Badge variant="outline" className="text-[10px]">MVP demo · retained</Badge>
                         </div>
                         <Textarea
                             id="transcript"
@@ -247,6 +319,7 @@ def:pub PathwayView() -> JsxElement {
                                     <Badge>{interpretation["primary_need"] as str}</Badge>
                                     <Badge variant="secondary">{(interpretation["urgency"] as str) + " urgency"}</Badge>
                                     <Badge variant="outline">{interpretation["availability"] as str}</Badge>
+                                    <Badge variant="outline">{interpretation["agent"] as str}</Badge>
                                 </div>
                             </div>
                             <div className="rounded-lg border border-border p-4">
@@ -279,6 +352,12 @@ def:pub PathwayView() -> JsxElement {
                             <div className="rounded-lg border border-primary/30 bg-primary/5 p-4 md:col-span-2">
                                 <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Allocation output</p>
                                 <p className="mt-2 text-sm font-medium">{(interpretation["pickup_name"] as str) + " → " + (interpretation["recommended_service"] as str)}</p>
+                                <p className="mt-1 text-xs text-muted-foreground">{interpretation["allocation_reason"] as str}</p>
+                                <div className="mt-3 flex flex-wrap gap-2">
+                                    <Badge variant="secondary">{(interpretation["recommended_location_category"] as str)}</Badge>
+                                    <Badge variant="outline">{"−" + str(interpretation["visit_cost"] as int) + " cost"}</Badge>
+                                    <Badge className="bg-emerald-600 text-white">{"+" + str(interpretation["points_reward"] as int) + " earned"}</Badge>
+                                </div>
                             </div>
                         </div>
                     }
@@ -363,6 +442,19 @@ def:pub PathwayView() -> JsxElement {
                             {(current["av_name"] as str) != "" and <Badge className="text-xs">{current["av_name"] as str}</Badge>}
                             <Badge variant="secondary" className="text-xs">{f"{current['distance_miles'] as float:.1f} mi"}</Badge>
                             <Badge variant="secondary" className="text-xs">{str(current["eta_min"] as int) + " min ETA"}</Badge>
+                            <Badge variant="outline" className="text-xs">{current["upskill_category"] as str}</Badge>
+                        </div>
+                        <div className="mt-2 flex items-center justify-between gap-3 rounded-lg bg-muted/50 p-3">
+                            <div className="text-xs">
+                                <span className="font-semibold text-rose-700">{"−" + str(current["visit_cost"] as int) + " cost"}</span>
+                                <span className="mx-2 text-muted-foreground">·</span>
+                                <span className="font-semibold text-emerald-700">{"+" + str(current["points_reward"] as int) + " earned"}</span>
+                            </div>
+                            {not (current["completed"] as bool) and
+                                <Button size="sm" onClick={lambda { handle_complete_visit(); }} disabled={completing}>
+                                    {completing and "Completing..." or "Complete visit"}
+                                </Button>
+                            }
                         </div>
                     </CardContent>
                 </Card>
@@ -381,6 +473,22 @@ def:pub PathwayView() -> JsxElement {
                     </Card>
                 }
             </div>
+        }
+
+        {has_completion and
+            <Card className="border-emerald-300 bg-emerald-50">
+                <CardContent className="flex flex-col gap-2 p-5 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                        <p className="font-semibold text-emerald-900">Visit completed and points applied</p>
+                        <p className="mt-1 text-sm text-emerald-800">
+                            {(completion["participant"] as str) + " now has " + str(completion["new_balance"] as int) + " points (" + ("+" if (completion["net_points"] as int) > 0 else "") + str(completion["net_points"] as int) + " net)."}
+                        </p>
+                    </div>
+                    {(completion["transition_status"] as str) == "ready_for_review" and
+                        <Badge className="w-fit bg-amber-500 text-white">Ready for human review</Badge>
+                    }
+                </CardContent>
+            </Card>
         }
 
         <Card>

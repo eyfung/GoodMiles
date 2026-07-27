@@ -12,6 +12,8 @@ node Neighbor {
     has points_earned: int = 0;
     has points_spent: int = 0;
     has points_initialized: bool = False;
+    has transition_approved: bool = False;
+    has transition_reviewed_at: str = "";
 }
 
 node ServiceStop {
@@ -140,6 +142,8 @@ def:pub api_neighbors() -> list[dict] {
             "points_spent": n.points_spent,
             "home_zone": n.home_zone,
             "upskill_progress": upskill_progress,
+            "transition_status": "transition_ready" if getattr(n, "transition_approved", False) else ("ready_for_review" if n.points_balance >= 150 else ("not_started" if n.points_balance <= 50 else "in_progress")),
+            "transition_reviewed_at": getattr(n, "transition_reviewed_at", ""),
             "wellbeing_history": wellbeing_history
         }];
     }
@@ -239,6 +243,24 @@ def:pub api_update_neighbor(person_id: str, name: str, home_zone: str) -> dict {
         "name": person.name,
         "home_zone": person.home_zone
     };
+}
+
+def:pub api_review_transition(person_id: str, approved: bool) -> dict {
+    for person in get_all_neighbors() {
+        if jid(person) == person_id {
+            if person.points_balance < 150 {
+                return {"error": "Participant needs at least 150 points for final review"};
+            }
+            person.transition_approved = approved;
+            person.transition_reviewed_at = datetime.now().strftime("%m/%d/%Y %H:%M");
+            return {
+                "status": "transition_ready" if approved else "in_progress",
+                "id": person_id,
+                "reviewed_at": person.transition_reviewed_at
+            };
+        }
+    }
+    return {"error": "Person not found"};
 }
 
 def:pub api_stops() -> list[dict] {
