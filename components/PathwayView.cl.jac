@@ -10,16 +10,8 @@ import from ".ui.skeleton" { Skeleton }
 import from ".ui.spinner" { Spinner }
 cl import from "react-leaflet" { MapContainer, TileLayer, CircleMarker, Polyline, Popup }
 sv import from "..services.pathway" {
-    api_fleet_state, api_request_ride, api_reset_fleet
+    api_fleet_state, api_ingest_consultation, api_reset_fleet
 }
-
-glob _NEED_OPTIONS: list[dict] = [
-    {"value": "food", "label": "Food assistance"},
-    {"value": "coaching", "label": "Job coaching"},
-    {"value": "health", "label": "Healthcare"},
-    {"value": "counseling", "label": "Counseling"},
-    {"value": "employment", "label": "Employment services"},
-];
 
 def av_color(status: str) -> str {
     if status == "enroute" {
@@ -57,15 +49,13 @@ def:pub PathwayView() -> JsxElement {
     has fleet: list[dict] = [];
     has requests: list[dict] = [];
     has capacity: dict = {};
+    has scenarios: list[dict] = [];
     has loading: bool = True;
 
-    has name: str = "";
-    has note: str = "";
-    has availability: str = "now";
-    has has_car: str = "no";
-    has need: str = "food";
-    has pickup_name: str = "";
-    has dest_id: str = "";
+    has scenario_id: str = "";
+    has transcript: str = "";
+    has interpretation: dict = {};
+    has has_interpretation: bool = False;
 
     has requesting: bool = False;
     has current: dict = {};
@@ -81,18 +71,11 @@ def:pub PathwayView() -> JsxElement {
             capacity = st["capacity"] as dict;
             pickups = st["pickups"] as list[dict];
             destinations = st["destinations"] as list[dict];
+            scenarios = st["scenarios"] as list[dict];
         } except Exception as e {
             error = str(e);
         }
         loading = False;
-    }
-
-    def handle_name_change(e: ChangeEvent) {
-        name = e.target.value;
-    }
-
-    def handle_note_change(e: ChangeEvent) {
-        note = e.target.value;
     }
 
     def _apply_state(st: dict) {
@@ -101,24 +84,30 @@ def:pub PathwayView() -> JsxElement {
         capacity = st["capacity"] as dict;
         pickups = st["pickups"] as list[dict];
         destinations = st["destinations"] as list[dict];
+        scenarios = st["scenarios"] as list[dict];
     }
 
-    async def handle_request() -> None {
-        if name == "" or pickup_name == "" or dest_id == "" {
+    def handle_scenario(selected_id: str) {
+        scenario_id = selected_id;
+        transcript = "";
+        interpretation = {};
+        has_interpretation = False;
+        has_current = False;
+        for scenario in scenarios {
+            if (scenario["id"] as str) == selected_id {
+                transcript = scenario["transcript"] as str;
+            }
+        }
+    }
+
+    async def handle_ingest() -> None {
+        if scenario_id == "" or transcript.strip() == "" {
             return;
         }
         requesting = True;
         error = "";
-        plat = 0.0;
-        plng = 0.0;
-        for pp in pickups {
-            if (pp["name"] as str) == pickup_name {
-                plat = pp["lat"] as float;
-                plng = pp["lng"] as float;
-            }
-        }
         try {
-            data: any = await api_request_ride(name, note, availability, has_car == "yes", need, pickup_name, plat, plng, dest_id);
+            data: any = await api_ingest_consultation(scenario_id, transcript);
             st = data as dict;
             if "error" in st {
                 error = st["error"] as str;
@@ -126,6 +115,8 @@ def:pub PathwayView() -> JsxElement {
                 _apply_state(st);
                 current = st["current"] as dict;
                 has_current = True;
+                interpretation = st["interpretation"] as dict;
+                has_interpretation = True;
             }
         } except Exception as e {
             error = str(e);
@@ -142,6 +133,8 @@ def:pub PathwayView() -> JsxElement {
             _apply_state(st);
             has_current = False;
             current = {};
+            interpretation = {};
+            has_interpretation = False;
         } except Exception as e {
             error = str(e);
         }
@@ -153,13 +146,13 @@ def:pub PathwayView() -> JsxElement {
             <div className="mb-6">
                 <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">On-Demand AV as a Social Service</p>
                 <h1 className="text-2xl font-semibold tracking-tight mt-1">Pathway</h1>
-                <p className="text-muted-foreground text-sm mt-1">Dispatching the autonomous fleet to social-service appointments</p>
+                <p className="text-muted-foreground text-sm mt-1">Private in-car consultations interpreted into safe service pathways</p>
             </div>
             <Skeleton className="h-96 w-full" />
         </div>;
     }
 
-    can_request = name != "" and pickup_name != "" and dest_id != "" and not requesting;
+    can_request = scenario_id != "" and transcript.strip() != "" and not requesting;
     cap_total = (capacity["total"] as int) if "total" in capacity else 0;
     cap_used = (capacity["used"] as int) if "used" in capacity else 0;
     cap_free = (capacity["free"] as int) if "free" in capacity else 0;
@@ -174,9 +167,9 @@ def:pub PathwayView() -> JsxElement {
                 <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">On-Demand AV as a Social Service</p>
                 <h1 className="text-2xl font-semibold tracking-tight mt-1">Pathway</h1>
                 <p className="text-muted-foreground text-sm mt-1 max-w-3xl">
-                    A participant requests a ride to a booked service. The agent dispatches an AV by
-                    live fleet capacity and proximity, plans the route, maps every trip, and recommends
-                    the best next ride.
+                    A private consultation with the in-car avatar becomes structured, consent-scoped information.
+                    The interpretation agent identifies needs and wellbeing signals, then allocates a safe route
+                    using live service and fleet capacity.
                 </p>
             </div>
             <div className="flex items-center gap-2">
@@ -188,100 +181,117 @@ def:pub PathwayView() -> JsxElement {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <Card className="lg:col-span-1">
                 <CardHeader>
-                    <CardTitle>Ride request</CardTitle>
-                    <CardDescription>Participant intake at the community center.</CardDescription>
+                    <CardTitle>In-car consultation</CardTitle>
+                    <CardDescription>Choose an avatar scenario or edit its raw transcript before ingestion.</CardDescription>
                 </CardHeader>
                 <CardContent className="flex flex-col gap-4">
-                    <Field>
-                        <FieldLabel htmlFor="name">Name</FieldLabel>
-                        <Input id="name" value={name} onChange={handle_name_change} placeholder="e.g. Maya" />
-                    </Field>
-                    <Field>
-                        <FieldLabel htmlFor="pickup">Where are you now? (pickup)</FieldLabel>
-                        <Select value={pickup_name} onValueChange={lambda (v: str) { pickup_name = v; }}>
-                            <SelectTrigger id="pickup"><SelectValue placeholder="Current location..." /></SelectTrigger>
-                            <SelectContent>
-                                <SelectGroup>
-                                    {for pp in pickups {
-                                        pp_name = pp["name"] as str;
-                                        pp_zone = pp["zone"] as str;
-                                        <SelectItem key={pp_name} value={pp_name}>{pp_name}</SelectItem>
-                                    }}
-                                </SelectGroup>
-                            </SelectContent>
-                        </Select>
-                    </Field>
-                    <Field>
-                        <FieldLabel htmlFor="dest">Where are you going? (service)</FieldLabel>
-                        <Select value={dest_id} onValueChange={lambda (v: str) { dest_id = v; }}>
-                            <SelectTrigger id="dest"><SelectValue placeholder="Booked service..." /></SelectTrigger>
-                            <SelectContent>
-                                <SelectGroup>
-                                    {for d in destinations {
-                                        d_id = d["id"] as str;
-                                        d_service = d["service"] as str;
-                                        d_name = d["name"] as str;
-                                        <SelectItem key={d_id} value={d_id}>{d_service + " — " + d_name}</SelectItem>
-                                    }}
-                                </SelectGroup>
-                            </SelectContent>
-                        </Select>
-                    </Field>
-                    <Field>
-                        <FieldLabel htmlFor="note">Experience feedback (note)</FieldLabel>
-                        <Textarea id="note" value={note} onChange={handle_note_change} placeholder="e.g. Needs a wheelchair-accessible vehicle, mornings only" />
-                    </Field>
-                    <div className="grid grid-cols-2 gap-4">
-                        <Field>
-                            <FieldLabel htmlFor="avail">Availability</FieldLabel>
-                            <Select value={availability} onValueChange={lambda (v: str) { availability = v; }}>
-                                <SelectTrigger id="avail"><SelectValue /></SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="now">Now</SelectItem>
-                                    <SelectItem value="morning">Morning</SelectItem>
-                                    <SelectItem value="afternoon">Afternoon</SelectItem>
-                                </SelectContent>
-                            </Select>
-                        </Field>
-                        <Field>
-                            <FieldLabel htmlFor="car">Has a car?</FieldLabel>
-                            <Select value={has_car} onValueChange={lambda (v: str) { has_car = v; }}>
-                                <SelectTrigger id="car"><SelectValue /></SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="no">No</SelectItem>
-                                    <SelectItem value="yes">Yes</SelectItem>
-                                </SelectContent>
-                            </Select>
-                        </Field>
+                    <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs leading-relaxed text-emerald-900">
+                        <span className="font-semibold">Private by design.</span>
+                        {" The participant controls what they share. Extracted details are used only for consented service coordination and safe transportation."}
                     </div>
                     <Field>
-                        <FieldLabel htmlFor="need">What do you need next?</FieldLabel>
-                        <Select value={need} onValueChange={lambda (v: str) { need = v; }}>
-                            <SelectTrigger id="need"><SelectValue /></SelectTrigger>
+                        <FieldLabel htmlFor="scenario">Avatar scenario</FieldLabel>
+                        <Select value={scenario_id} onValueChange={handle_scenario}>
+                            <SelectTrigger id="scenario"><SelectValue placeholder="Choose one of five consultations..." /></SelectTrigger>
                             <SelectContent>
                                 <SelectGroup>
-                                    {for n in _NEED_OPTIONS {
-                                        n_val = n["value"] as str;
-                                        n_label = n["label"] as str;
-                                        <SelectItem key={n_val} value={n_val}>{n_label}</SelectItem>
+                                    {for scenario in scenarios {
+                                        scenario_value = scenario["id"] as str;
+                                        scenario_title = scenario["title"] as str;
+                                        <SelectItem key={scenario_value} value={scenario_value}>{scenario_title}</SelectItem>
                                     }}
                                 </SelectGroup>
                             </SelectContent>
                         </Select>
                     </Field>
-                    <Button onClick={lambda { handle_request(); }} disabled={not can_request}>
+                    <Field>
+                        <div className="flex items-center justify-between gap-2">
+                            <FieldLabel htmlFor="transcript">Raw avatar transcript</FieldLabel>
+                            <Badge variant="outline" className="text-[10px]">Ingested input</Badge>
+                        </div>
+                        <Textarea
+                            id="transcript"
+                            value={transcript}
+                            onChange={lambda (e: any) { transcript = e.target.value; }}
+                            placeholder="Select a scenario to load its private consultation transcript."
+                            className="min-h-72 text-xs leading-relaxed"
+                        />
+                    </Field>
+                    <Button onClick={lambda { handle_ingest(); }} disabled={not can_request}>
                         {requesting and <Spinner className="size-4 mr-2" /> or <span></span>}
-                        {requesting and "Dispatching..." or "Request ride & dispatch"}
+                        {requesting and "Interpreting & allocating..." or "Interpret & allocate pathway"}
                     </Button>
                 </CardContent>
             </Card>
 
             <Card className="lg:col-span-2 overflow-hidden">
                 <CardHeader>
-                    <CardTitle>Fleet map</CardTitle>
-                    <CardDescription>AVs (green idle / blue en-route), pickups (grey), services (amber), and every planned route.</CardDescription>
+                    <CardTitle>Interpretation layer</CardTitle>
+                    <CardDescription>The agent separates extracted signals from the raw transcript before any allocation decision.</CardDescription>
                 </CardHeader>
                 <CardContent>
+                    {not has_interpretation and
+                        <div className="h-[440px] rounded-lg border border-dashed border-border flex items-center justify-center p-8 text-center">
+                            <div className="max-w-md">
+                                <p className="font-medium">No transcript interpreted yet</p>
+                                <p className="mt-1 text-sm text-muted-foreground">Choose a consultation scenario, review the raw transcript, and let the Pathway agent extract only the information needed for coordination.</p>
+                            </div>
+                        </div>
+                    }
+                    {has_interpretation and
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="rounded-lg border border-border p-4">
+                                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Participant & need</p>
+                                <p className="mt-2 text-lg font-semibold">{interpretation["participant"] as str}</p>
+                                <div className="mt-2 flex flex-wrap gap-2">
+                                    <Badge>{interpretation["primary_need"] as str}</Badge>
+                                    <Badge variant="secondary">{(interpretation["urgency"] as str) + " urgency"}</Badge>
+                                    <Badge variant="outline">{interpretation["availability"] as str}</Badge>
+                                </div>
+                            </div>
+                            <div className="rounded-lg border border-border p-4">
+                                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Wellbeing signal</p>
+                                <p className="mt-2 text-sm font-medium">{interpretation["wellbeing_signal"] as str}</p>
+                                <p className="mt-2 text-xs text-muted-foreground">{interpretation["transportation_barrier"] as str}</p>
+                            </div>
+                            <div className="rounded-lg border border-border p-4 md:col-span-2">
+                                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Agent summary</p>
+                                <p className="mt-2 text-sm leading-relaxed">{interpretation["summary"] as str}</p>
+                            </div>
+                            <div className="rounded-lg border border-border p-4">
+                                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Extracted evidence</p>
+                                <ul className="mt-2 space-y-1.5 text-sm">
+                                    {for evidence in interpretation["evidence"] as list {
+                                        <li key={evidence as str}>{"• " + (evidence as str)}</li>
+                                    }}
+                                </ul>
+                            </div>
+                            <div className="rounded-lg border border-border p-4">
+                                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Safety & consent</p>
+                                <div className="mt-2 flex flex-wrap gap-2">
+                                    {for flag in interpretation["safety_flags"] as list {
+                                        <Badge key={flag as str} variant="destructive">{flag as str}</Badge>
+                                    }}
+                                    {len(interpretation["safety_flags"] as list) == 0 and <Badge variant="secondary">No immediate flags</Badge>}
+                                </div>
+                                <p className="mt-3 text-xs leading-relaxed text-muted-foreground">{interpretation["consent_scope"] as str}</p>
+                            </div>
+                            <div className="rounded-lg border border-primary/30 bg-primary/5 p-4 md:col-span-2">
+                                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Allocation output</p>
+                                <p className="mt-2 text-sm font-medium">{(interpretation["pickup_name"] as str) + " → " + (interpretation["recommended_service"] as str)}</p>
+                            </div>
+                        </div>
+                    }
+                </CardContent>
+            </Card>
+        </div>
+
+        <Card className="overflow-hidden">
+            <CardHeader>
+                <CardTitle>Pathway route & fleet map</CardTitle>
+                <CardDescription>Interpretation outputs feed the combined optimization and dispatch layer using live capacity and proximity.</CardDescription>
+            </CardHeader>
+            <CardContent>
                     <div className="h-[440px] w-full rounded-lg overflow-hidden border border-border">
                         <MapContainer center={[37.762, -122.42]} zoom={12} style={{"height": "100%", "width": "100%"}} scrollWheelZoom={False}>
                             <TileLayer
@@ -325,9 +335,8 @@ def:pub PathwayView() -> JsxElement {
                             }}
                         </MapContainer>
                     </div>
-                </CardContent>
-            </Card>
-        </div>
+            </CardContent>
+        </Card>
 
         {error != "" and
             <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-4 text-destructive text-sm">

@@ -3,6 +3,43 @@
 @import "shadcn/tailwind.css";
 @import "@fontsource-variable/inter";
 
+@keyframes gm-float {
+  0%, 100% { transform: translate3d(0, 0, 0) rotate(-0.5deg); }
+  50% { transform: translate3d(0, -12px, 0) rotate(0.5deg); }
+}
+
+@keyframes gm-route {
+  0% { left: 0.75rem; }
+  50% { left: calc(100% - 1.5rem); }
+  100% { left: 0.75rem; }
+}
+
+.gm-float-card {
+  will-change: transform;
+  animation: gm-float 5.5s ease-in-out infinite;
+}
+
+.gm-float-two {
+  animation-delay: -1.8s;
+  animation-duration: 6.5s;
+}
+
+.gm-float-three {
+  animation-delay: -3.2s;
+  animation-duration: 7s;
+}
+
+.gm-route-dot {
+  animation: gm-route 4s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gm-float-card,
+  .gm-route-dot {
+    animation: none;
+  }
+}
+
 @custom-variant dark (&:is(.dark *));
 
 :root {

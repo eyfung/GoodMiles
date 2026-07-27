@@ -3,7 +3,8 @@ import from services.goodmiles {
     Neighbor, ServiceStop, Trip, Seeded
 }
 import from services.pathway {
-    api_pickup_points, api_destinations, api_fleet_state, api_request_ride, api_reset_fleet,
+    api_pickup_points, api_destinations, api_fleet_state, api_consultation_scenarios,
+    api_ingest_consultation, api_request_ride, api_reset_fleet,
     AV, RideRequest, FleetSeeded
 }
 
@@ -11,8 +12,8 @@ cl import ".styles.global.css";
 cl import "leaflet/dist/leaflet.css";
 cl import from ".components.NeighborsView" { NeighborsView }
 cl import from ".components.ServiceStopsView" { ServiceStopsView }
-cl import from ".components.OptimizeView" { OptimizeView }
 cl import from ".components.PathwayView" { PathwayView }
+cl import from ".components.LandingView" { LandingView }
 cl import from "@jac/runtime" { Router, Routes, Route, Navigate }
 cl import from "react-router-dom" { NavLink, useLocation }
 
@@ -24,6 +25,10 @@ def:pub app() -> JsxElement {
 
 def:pub AppShell() -> JsxElement {
     has loc: any = useLocation();
+
+    if loc.pathname == "/" {
+        return <LandingView />;
+    }
 
     def nav_cls(path: str) -> str {
         active = loc.pathname == path or (path != "/" and loc.pathname.startsWith(path));
@@ -53,9 +58,6 @@ def:pub AppShell() -> JsxElement {
                 <NavLink to="/stops" className={lambda (s: any) { return nav_cls("/stops"); }}>
                     Service Stops
                 </NavLink>
-                <NavLink to="/optimize" className={lambda (s: any) { return nav_cls("/optimize"); }}>
-                    Optimize
-                </NavLink>
                 <NavLink to="/pathway" className={lambda (s: any) { return nav_cls("/pathway"); }}>
                     Pathway
                 </NavLink>
@@ -66,10 +68,9 @@ def:pub AppShell() -> JsxElement {
         </aside>
         <main className="flex-1 overflow-auto" style={{"backgroundColor": "#fbfaf9"}}>
             <Routes>
-                <Route path="/" element={<Navigate to="/neighbors" replace={True} />} />
                 <Route path="/neighbors" element={<NeighborsView />} />
                 <Route path="/stops" element={<ServiceStopsView />} />
-                <Route path="/optimize" element={<OptimizeView />} />
+                <Route path="/optimize" element={<Navigate to="/pathway" replace={True} />} />
                 <Route path="/pathway" element={<PathwayView />} />
             </Routes>
         </main>
