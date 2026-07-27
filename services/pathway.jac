@@ -19,9 +19,9 @@ import from services.goodmiles { ServiceStop, get_all_stops, seed_demo_data }
 
 glob AV_SPEED_MPH: float = 25.0;
 
-# ============================================================
+# ========================================
 # Nodes
-# ============================================================
+# ========================================
 
 node AV {
     has name: str;
@@ -59,9 +59,9 @@ node FleetSeeded {
     has done: bool = True;
 }
 
-# ============================================================
+# ========================================
 # Seed — the AV fleet (destinations come from goodmiles ServiceStops)
-# ============================================================
+# ========================================
 
 def seed_fleet_data {
     existing = [root-->][?:FleetSeeded];
@@ -75,9 +75,9 @@ def seed_fleet_data {
     root ++> AV(name="AV-04", seats_total=3, lat=37.7800, lng=-122.4120, zone="north");
 }
 
-# ============================================================
+# ========================================
 # Geometry + reference data
-# ============================================================
+# ========================================
 
 def center_coord(stop: ServiceStop) -> dict {
     known = {
@@ -165,11 +165,10 @@ def _nearest_stop_of_type(stop_type: str, from_lat: float, from_lng: float, excl
     return best;
 }
 
-# ============================================================
+# ========================================
 # TOOLS — deterministic dispatch + routing (real state changes)
-# ============================================================
+# ========================================
 
-# Pick the nearest AV to the pickup that still has a free seat.
 def dispatch_av(pickup_lat: float, pickup_lng: float) -> AV | None {
     best: AV | None = None;
     best_d = 999999.0;
@@ -246,23 +245,19 @@ def _destinations_list() -> list {
     return out;
 }
 
-# ============================================================
+# ========================================
 # Public API
-# ============================================================
+# ========================================
 
 def:pub api_pickup_points() -> list[dict] {
     return _pickup_points();
 }
 
 def:pub api_destinations() -> list[dict] {
-    seed_demo_data();
-    seed_fleet_data();
     return _destinations_list();
 }
 
 def:pub api_fleet_state() -> dict {
-    seed_demo_data();
-    seed_fleet_data();
     return _serialize_state(None);
 }
 
@@ -270,8 +265,6 @@ def:pub api_request_ride(
     name: str, note: str, availability: str, has_car: bool, need: str,
     pickup_name: str, pickup_lat: float, pickup_lng: float, dest_id: str
 ) -> dict {
-    seed_demo_data();
-    seed_fleet_data();
     stop = get_service_stop(dest_id);
     if stop == None {
         return {"error": "Destination not found"};
@@ -316,7 +309,6 @@ def:pub api_request_ride(
         }
     }
 
-    # Recommend the most useful next service/ride.
     nt = _next_type(stop.stop_type);
     rec = _nearest_stop_of_type(nt, dest_lat, dest_lng, jid(stop));
     if len(rec) > 0 {
@@ -328,8 +320,6 @@ def:pub api_request_ride(
 }
 
 def:pub api_reset_fleet() -> dict {
-    seed_demo_data();
-    seed_fleet_data();
     for r in [root-->][?:RideRequest] {
         r.status = "cleared";
     }
@@ -338,4 +328,12 @@ def:pub api_reset_fleet() -> dict {
         v.status = "idle";
     }
     return _serialize_state(None);
+}
+
+# ========================================
+# Boot — seed fleet once when server starts
+# ========================================
+
+with entry {
+    seed_fleet_data();
 }
