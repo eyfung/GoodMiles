@@ -207,19 +207,19 @@ def:pub NeighborsView() -> JsxElement {
 
     def feeling_class(feeling: str) -> str {
         if feeling == "Great" {
-            return "bg-emerald-100 text-emerald-800";
+            return "bg-emerald-600 text-white";
         }
         elif feeling == "Good" {
-            return "bg-lime-100 text-lime-800";
+            return "bg-lime-400 text-lime-950";
         }
         elif feeling == "Okay" {
-            return "bg-amber-100 text-amber-800";
+            return "bg-yellow-300 text-yellow-950";
         }
         elif feeling == "Struggling" {
-            return "bg-orange-100 text-orange-800";
+            return "bg-orange-500 text-white";
         }
         elif feeling == "Distressed" {
-            return "bg-rose-100 text-rose-800";
+            return "bg-rose-600 text-white";
         }
         return "bg-muted text-muted-foreground";
     }

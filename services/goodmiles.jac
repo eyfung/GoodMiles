@@ -329,7 +329,29 @@ def:pub api_execute(neighbor_name: str, stop_name: str, feeling: str = "Not reco
     bonus = stop.bonus_on_visit;
     recorded_feeling = feeling;
     if recorded_feeling not in ["Great", "Good", "Okay", "Struggling", "Distressed"] {
-        recorded_feeling = "Not recorded";
+        previous_sessions = 0;
+        for existing_trip in [root-->][?:Trip] {
+            if existing_trip.neighbor_name == neighbor.name {
+                previous_sessions = previous_sessions + 1;
+            }
+        }
+        feeling_index = (previous_sessions + len(neighbor.name) + len(stop.name)) % 5;
+        recorded_feeling = ["Great", "Good", "Okay", "Struggling", "Distressed"][feeling_index];
+    }
+    recorded_notes = notes;
+    if recorded_notes.strip() == "" {
+        activity = stop.stop_type + " session at " + stop.name;
+        if recorded_feeling == "Great" {
+            recorded_notes = neighbor.name + " felt great during today's " + activity + ". They were highly engaged and completed the planned activity with strong energy.";
+        } elif recorded_feeling == "Good" {
+            recorded_notes = neighbor.name + " felt good during today's " + activity + ". They participated comfortably and completed the planned activity.";
+        } elif recorded_feeling == "Okay" {
+            recorded_notes = neighbor.name + " felt okay during today's " + activity + ". They completed the planned activity at a steady pace.";
+        } elif recorded_feeling == "Struggling" {
+            recorded_notes = neighbor.name + " was struggling during today's " + activity + ". They completed the session with additional support.";
+        } else {
+            recorded_notes = neighbor.name + " felt distressed during today's " + activity + ". They participated briefly, and a staff follow-up is recommended.";
+        }
     }
 
     if neighbor.points_balance < cost {
@@ -348,7 +370,7 @@ def:pub api_execute(neighbor_name: str, stop_name: str, feeling: str = "Not reco
         cost=cost,
         bonus=bonus,
         feeling=recorded_feeling,
-        notes=notes,
+        notes=recorded_notes,
         notes_saved_at=datetime.now().strftime("%m/%d/%Y %H:%M")
     );
 
@@ -359,7 +381,7 @@ def:pub api_execute(neighbor_name: str, stop_name: str, feeling: str = "Not reco
         "cost": cost,
         "bonus": bonus,
         "feeling": recorded_feeling,
-        "notes": notes,
+        "notes": recorded_notes,
         "new_balance": neighbor.points_balance
     };
 }

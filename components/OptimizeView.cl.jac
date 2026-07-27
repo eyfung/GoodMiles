@@ -10,10 +10,8 @@ def:pub OptimizeView() -> JsxElement {
     has loading_neighbors: bool = True;
     has optimizing: bool = False;
     has executing: str = "";
-    has pending_stop: str = "";
-    has selected_feeling: str = "";
-    has checkin_notes: str = "";
     has exec_result: str = "";
+    has exec_mood_class: str = "";
     has exec_error: str = "";
     has error: str = "";
 
@@ -31,6 +29,7 @@ def:pub OptimizeView() -> JsxElement {
         if selected_neighbor == "" { return; }
         optimizing = True;
         exec_result = "";
+        exec_mood_class = "";
         exec_error = "";
         try {
             data: any = await api_optimize(neighbor_name=selected_neighbor);
@@ -41,15 +40,13 @@ def:pub OptimizeView() -> JsxElement {
         optimizing = False;
     }
 
-    async def handle_execute(stop_name: str, feeling: str, notes: str) -> None {
-        pending_stop = "";
-        selected_feeling = "";
-        checkin_notes = "";
+    async def handle_execute(stop_name: str) -> None {
         executing = stop_name;
         exec_result = "";
+        exec_mood_class = "";
         exec_error = "";
         try {
-            data: any = await api_execute(selected_neighbor, stop_name, feeling, notes);
+            data: any = await api_execute(selected_neighbor, stop_name);
             res = data as dict;
             if "error" in res {
                 exec_error = res["error"] as str;
@@ -58,7 +55,18 @@ def:pub OptimizeView() -> JsxElement {
                 cost_val = res["cost"] as int;
                 bonus_val = res["bonus"] as int;
                 feeling_val = res["feeling"] as str;
-                exec_result = "Trip to " + stop_name + " complete. Feeling: " + feeling_val + ". Cost: " + str(cost_val) + " pts, Bonus: +" + str(bonus_val) + " pts. New balance: " + str(new_bal) + " pts.";
+                if feeling_val == "Great" {
+                    exec_mood_class = "bg-emerald-600 text-white";
+                } elif feeling_val == "Good" {
+                    exec_mood_class = "bg-lime-400 text-lime-950";
+                } elif feeling_val == "Okay" {
+                    exec_mood_class = "bg-yellow-300 text-yellow-950";
+                } elif feeling_val == "Struggling" {
+                    exec_mood_class = "bg-orange-500 text-white";
+                } else {
+                    exec_mood_class = "bg-rose-600 text-white";
+                }
+                exec_result = "Autonomous trip to " + stop_name + " complete. Check-In automatically recorded as " + feeling_val + ". Cost: " + str(cost_val) + " pts, Bonus: +" + str(bonus_val) + " pts. New balance: " + str(new_bal) + " pts.";
                 ndata: any = await api_neighbors();
                 neighbors = ndata as list[dict];
                 rdata: any = await api_optimize(neighbor_name=selected_neighbor);
@@ -98,7 +106,7 @@ def:pub OptimizeView() -> JsxElement {
             <p className="text-[13px] mb-4" style={{"color": "#7e7e7d"}}>Choose a neighbor to optimize their mobility route</p>
             <div className="flex flex-wrap gap-3 items-center">
                 <div className="w-64">
-                    <Select onValueChange={lambda (v: str) { selected_neighbor = v; route = {}; exec_result = ""; exec_error = ""; }}>
+                    <Select onValueChange={lambda (v: str) { selected_neighbor = v; route = {}; exec_result = ""; exec_mood_class = ""; exec_error = ""; }}>
                         <SelectTrigger className="rounded-[9999px] text-[13px]" style={{"backgroundColor": "#f6f4ef", "border": "none", "color": "#343433"}}>
                             <SelectValue placeholder="Select a neighbor..." />
                         </SelectTrigger>
@@ -129,7 +137,7 @@ def:pub OptimizeView() -> JsxElement {
         </div>
 
         {exec_result != "" and
-            <div className="rounded-[10px] px-5 py-3.5 text-[14px]" style={{"backgroundColor": "#e6fff5", "color": "#00c978", "boxShadow": "inset 0 0 0 1px #b3f0d8"}}>
+            <div className={"rounded-[10px] px-5 py-3.5 text-[14px] font-medium " + exec_mood_class}>
                 {exec_result}
             </div>
         }
@@ -183,11 +191,7 @@ def:pub OptimizeView() -> JsxElement {
                                     <td className="px-6 py-3.5 text-right">
                                         <button
                                             disabled={is_executing or executing != ""}
-                                            onClick={lambda {
-                                                pending_stop = p_stop;
-                                                selected_feeling = "";
-                                                checkin_notes = "";
-                                            }}
+                                            onClick={lambda { handle_execute(p_stop); }}
                                             className="flex items-center gap-1.5 px-4 py-1.5 text-[12px] font-semibold ml-auto transition-opacity disabled:opacity-40"
                                             style={{"backgroundColor": "#121212", "color": "#fbfaf9", "borderRadius": "9999px", "border": "none", "cursor": "pointer"}}
                                         >
@@ -203,58 +207,5 @@ def:pub OptimizeView() -> JsxElement {
             </div>
         }
 
-        {pending_stop != "" and
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/35 p-4">
-                <div className="w-full max-w-md rounded-[14px] bg-white p-6 shadow-xl">
-                    <h2 className="text-[20px] font-semibold" style={{"color": "#343433"}}>Session check-in</h2>
-                    <p className="text-[14px] mt-1 mb-5" style={{"color": "#7e7e7d"}}>
-                        {"How was " + selected_neighbor + " feeling during the session at " + pending_stop + "?"}
-                    </p>
-                    <div className="grid grid-cols-1 gap-2">
-                        {for feeling_option in ["Great", "Good", "Okay", "Struggling", "Distressed"] {
-                            <button
-                                key={feeling_option}
-                                onClick={lambda { selected_feeling = feeling_option; }}
-                                className={"w-full rounded-[10px] border px-4 py-2.5 text-left text-[14px] font-medium hover:bg-[#f6f4ef] " + ("bg-[#eef8f1]" if selected_feeling == feeling_option else "")}
-                                style={{"borderColor": "#e5e2dd", "color": "#343433"}}
-                            >
-                                {feeling_option}
-                            </button>
-                        }}
-                    </div>
-                    <div className="mt-4">
-                        <label htmlFor="checkin-notes" className="text-[13px] font-medium" style={{"color": "#343433"}}>Notes</label>
-                        <textarea
-                            id="checkin-notes"
-                            value={checkin_notes}
-                            onChange={lambda (e: any) { checkin_notes = e.target.value; }}
-                            placeholder="Add notes about this session..."
-                            rows={3}
-                            className="mt-1.5 w-full resize-none rounded-[10px] border px-3 py-2.5 text-[14px] outline-none focus:ring-2"
-                            style={{"borderColor": "#e5e2dd", "color": "#343433"}}
-                        />
-                    </div>
-                    <button
-                        onClick={lambda { handle_execute(pending_stop, selected_feeling, checkin_notes); }}
-                        disabled={selected_feeling == ""}
-                        className="mt-4 w-full rounded-[10px] px-4 py-2.5 text-[14px] font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
-                        style={{"backgroundColor": "#087443"}}
-                    >
-                        Save Check-In
-                    </button>
-                    <button
-                        onClick={lambda {
-                            pending_stop = "";
-                            selected_feeling = "";
-                            checkin_notes = "";
-                        }}
-                        className="mt-4 w-full text-[13px] font-medium"
-                        style={{"color": "#7e7e7d"}}
-                    >
-                        Cancel
-                    </button>
-                </div>
-            </div>
-        }
     </div>;
 }
