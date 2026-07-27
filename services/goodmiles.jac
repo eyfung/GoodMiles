@@ -327,9 +327,25 @@ def:pub api_execute(neighbor_name: str, stop_name: str, feeling: str = "Not reco
 
     cost = stop.base_cost;
     bonus = stop.bonus_on_visit;
+    net_points = bonus - cost;
     recorded_feeling = feeling;
     if recorded_feeling not in ["Great", "Good", "Okay", "Struggling", "Distressed"] {
-        recorded_feeling = "Not recorded";
+        if net_points >= 10 {
+            recorded_feeling = "Great";
+        } elif net_points > 0 {
+            recorded_feeling = "Good";
+        } elif net_points == 0 {
+            recorded_feeling = "Okay";
+        } elif net_points > -15 {
+            recorded_feeling = "Struggling";
+        } else {
+            recorded_feeling = "Distressed";
+        }
+    }
+    recorded_notes = notes;
+    if recorded_notes.strip() == "" {
+        net_text = ("+" if net_points > 0 else "") + str(net_points);
+        recorded_notes = "Autonomous vehicle pickup completed for " + neighbor.name + ". Session at " + stop.name + " was automatically recorded with a net point change of " + net_text + ".";
     }
 
     if neighbor.points_balance < cost {
@@ -348,7 +364,7 @@ def:pub api_execute(neighbor_name: str, stop_name: str, feeling: str = "Not reco
         cost=cost,
         bonus=bonus,
         feeling=recorded_feeling,
-        notes=notes,
+        notes=recorded_notes,
         notes_saved_at=datetime.now().strftime("%m/%d/%Y %H:%M")
     );
 
@@ -359,7 +375,7 @@ def:pub api_execute(neighbor_name: str, stop_name: str, feeling: str = "Not reco
         "cost": cost,
         "bonus": bonus,
         "feeling": recorded_feeling,
-        "notes": notes,
+        "notes": recorded_notes,
         "new_balance": neighbor.points_balance
     };
 }
