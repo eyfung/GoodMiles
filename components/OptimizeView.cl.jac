@@ -11,6 +11,7 @@ def:pub OptimizeView() -> JsxElement {
     has optimizing: bool = False;
     has executing: str = "";
     has exec_result: str = "";
+    has exec_mood_class: str = "";
     has exec_error: str = "";
     has error: str = "";
 
@@ -28,6 +29,7 @@ def:pub OptimizeView() -> JsxElement {
         if selected_neighbor == "" { return; }
         optimizing = True;
         exec_result = "";
+        exec_mood_class = "";
         exec_error = "";
         try {
             data: any = await api_optimize(neighbor_name=selected_neighbor);
@@ -41,6 +43,7 @@ def:pub OptimizeView() -> JsxElement {
     async def handle_execute(stop_name: str) -> None {
         executing = stop_name;
         exec_result = "";
+        exec_mood_class = "";
         exec_error = "";
         try {
             data: any = await api_execute(selected_neighbor, stop_name);
@@ -52,6 +55,17 @@ def:pub OptimizeView() -> JsxElement {
                 cost_val = res["cost"] as int;
                 bonus_val = res["bonus"] as int;
                 feeling_val = res["feeling"] as str;
+                if feeling_val == "Great" {
+                    exec_mood_class = "bg-emerald-600 text-white";
+                } elif feeling_val == "Good" {
+                    exec_mood_class = "bg-lime-400 text-lime-950";
+                } elif feeling_val == "Okay" {
+                    exec_mood_class = "bg-yellow-300 text-yellow-950";
+                } elif feeling_val == "Struggling" {
+                    exec_mood_class = "bg-orange-500 text-white";
+                } else {
+                    exec_mood_class = "bg-rose-600 text-white";
+                }
                 exec_result = "Autonomous trip to " + stop_name + " complete. Check-In automatically recorded as " + feeling_val + ". Cost: " + str(cost_val) + " pts, Bonus: +" + str(bonus_val) + " pts. New balance: " + str(new_bal) + " pts.";
                 ndata: any = await api_neighbors();
                 neighbors = ndata as list[dict];
@@ -92,7 +106,7 @@ def:pub OptimizeView() -> JsxElement {
             <p className="text-[13px] mb-4" style={{"color": "#7e7e7d"}}>Choose a neighbor to optimize their mobility route</p>
             <div className="flex flex-wrap gap-3 items-center">
                 <div className="w-64">
-                    <Select onValueChange={lambda (v: str) { selected_neighbor = v; route = {}; exec_result = ""; exec_error = ""; }}>
+                    <Select onValueChange={lambda (v: str) { selected_neighbor = v; route = {}; exec_result = ""; exec_mood_class = ""; exec_error = ""; }}>
                         <SelectTrigger className="rounded-[9999px] text-[13px]" style={{"backgroundColor": "#f6f4ef", "border": "none", "color": "#343433"}}>
                             <SelectValue placeholder="Select a neighbor..." />
                         </SelectTrigger>
@@ -123,7 +137,7 @@ def:pub OptimizeView() -> JsxElement {
         </div>
 
         {exec_result != "" and
-            <div className="rounded-[10px] px-5 py-3.5 text-[14px]" style={{"backgroundColor": "#e6fff5", "color": "#00c978", "boxShadow": "inset 0 0 0 1px #b3f0d8"}}>
+            <div className={"rounded-[10px] px-5 py-3.5 text-[14px] font-medium " + exec_mood_class}>
                 {exec_result}
             </div>
         }
