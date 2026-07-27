@@ -2,16 +2,17 @@ import from services.goodmiles {
     api_neighbors, api_add_neighbor, api_delete_neighbor, api_update_neighbor, api_stops, api_optimize, api_execute, api_update_trip_notes, api_trips,
     Neighbor, ServiceStop, Trip, Seeded
 }
-import from services.jobmatch {
-    api_community_centers, api_jobs, api_suggest_category, api_create_job_seeker, api_find_best_jobs,
-    CommunityCenter, Job, JobSeeker, JobMatchSeeded
+import from services.pathway {
+    api_pickup_points, api_destinations, api_fleet_state, api_request_ride, api_reset_fleet,
+    AV, RideRequest, FleetSeeded
 }
 
 cl import ".styles.global.css";
+cl import "leaflet/dist/leaflet.css";
 cl import from ".components.NeighborsView" { NeighborsView }
 cl import from ".components.ServiceStopsView" { ServiceStopsView }
 cl import from ".components.OptimizeView" { OptimizeView }
-cl import from ".components.JobMatchView" { JobMatchView }
+cl import from ".components.PathwayView" { PathwayView }
 cl import from "@jac/runtime" { Router, Routes, Route, Navigate }
 cl import from "react-router-dom" { NavLink, useLocation }
 
@@ -55,9 +56,8 @@ def:pub AppShell() -> JsxElement {
                 <NavLink to="/optimize" className={lambda (s: any) { return nav_cls("/optimize"); }}>
                     Optimize
                 </NavLink>
-                <NavLink to="/jobmatch" className={lambda (s: any) { return nav_cls("/jobmatch"); }}>
-                    <span className="text-base">Match</span>
-                    Job Match
+                <NavLink to="/pathway" className={lambda (s: any) { return nav_cls("/pathway"); }}>
+                    Pathway
                 </NavLink>
             </nav>
             <div className="px-4 py-3" style={{"borderTop": "1px solid #f2f0ed"}}>
@@ -70,7 +70,7 @@ def:pub AppShell() -> JsxElement {
                 <Route path="/neighbors" element={<NeighborsView />} />
                 <Route path="/stops" element={<ServiceStopsView />} />
                 <Route path="/optimize" element={<OptimizeView />} />
-                <Route path="/jobmatch" element={<JobMatchView />} />
+                <Route path="/pathway" element={<PathwayView />} />
             </Routes>
         </main>
     </div>;

@@ -49,6 +49,8 @@ react-resizable-panels = "*"
 recharts = "*"
 sonner = "*"
 vaul = "*"
+leaflet = "^1.9.4"
+react-leaflet = "^4.2.1"
 
 [dependencies.npm.dev]
 vite = "^6.4.1"
